@@ -1,0 +1,41 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3>Пользователи</h3>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>ID</th><th>ФИО</th><th>Логин</th><th>Отдел</th><th>Роль</th><th>Подтверждён</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.id }}</td>
+      <td>{{ u.full_name }}</td>
+      <td>{{ u.username }}</td>
+      <td>{{ u.department.name if u.department else '' }}</td>
+      <td>{{ u.role }}</td>
+      <td>
+        {% if u.is_approved %}
+          <span class="badge bg-success">Да</span>
+        {% else %}
+          <span class="badge bg-warning">Нет</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if not u.is_approved %}
+          <form method="post" action="{{ url_for('approve_user', user_id=u.id) }}" class="d-inline">
+            <button class="btn btn-sm btn-success">Подтвердить</button>
+          </form>
+        {% endif %}
+        {% if u.role != 'admin' %}
+          <form method="post" action="{{ url_for('delete_user', user_id=u.id) }}" class="d-inline">
+            <button class="btn btn-sm btn-danger">Удалить</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

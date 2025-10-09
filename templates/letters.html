@@ -1,0 +1,97 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3 class="mb-3">📨 Письма</h3>
+<div class="d-flex justify-content-between align-items-center mb-3">
+
+    <a href="{{ url_for('new_letter_page') }}" class="btn btn-success">
+      ➕ Новое письмо
+    </a>
+
+</div>
+<!-- ====== Вкладки фильтров ====== -->
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item">
+    <a class="nav-link {% if filter_type == 'all' %}active{% endif %}"
+       href="{{ url_for('letters_page', filter='all') }}">
+       Все
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if filter_type == 'my' %}active{% endif %}"
+       href="{{ url_for('letters_page', filter='my') }}">
+       Мои
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if filter_type == 'dept' %}active{% endif %}"
+       href="{{ url_for('letters_page', filter='dept') }}">
+       Мой отдел
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if filter_type == 'sent' %}active{% endif %}"
+       href="{{ url_for('letters_page', filter='sent') }}">
+       Исходящие
+    </a>
+  </li>
+</ul>
+
+<!-- ====== Таблица писем ====== -->
+<table class="table table-hover align-middle shadow-sm">
+  <thead class="table-dark">
+    <tr>
+      <th style="width: 50px;">#</th>
+      <th>Тема</th>
+      <th>Автор</th>
+      <th>Дата письма</th>
+      <th>Роль / Отдел</th>
+      <th style="width: 120px;">Действия</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for le in letters %}
+    <tr>
+      <td>{{ le.id }}</td>
+      <td>
+        <strong>{{ le.subject }}</strong><br>
+        <small class="text-muted">{{ le.body[:80] }}{% if le.body|length > 80 %}...{% endif %}</small>
+      </td>
+      <td>{{ le.author.full_name if le.author else '—' }}</td>
+      <td>
+        {% if le.letter_date %}
+          {{ le.letter_date.strftime('%d.%m.%Y') }}
+        {% else %}
+          {{ le.created_at.strftime('%d.%m.%Y') }}
+        {% endif %}
+      </td>
+      <td>
+        {# роль пользователя в письме #}
+        {% for r in le.recipients %}
+          {% if r.user_id == current_user.id %}
+            {% if r.role == 'executor' %}
+              <span class="badge bg-primary">Исполнитель</span>
+            {% else %}
+              <span class="badge bg-secondary">Ознакомление</span>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        {# если письмо адресовано отделу пользователя #}
+        {% for dep in le.departments %}
+          {% if dep.id == current_user.department_id %}
+            <span class="badge bg-info text-dark">Отдел: {{ dep.name }}</span>
+          {% endif %}
+        {% endfor %}
+      </td>
+      <td>
+        <a href="{{ url_for('letter_view', letter_id=le.id) }}"
+           class="btn btn-sm btn-outline-primary">Открыть</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="6" class="text-center text-muted">Нет писем</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

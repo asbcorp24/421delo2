@@ -1,0 +1,70 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3>Письмо #{{ le.id }} — {{ le.subject }}</h3>
+<p><strong>Дата письма:</strong> {{ le.letter_date }}</p>
+<p><strong>Отдел:</strong> {{ le.department.name if le.department else '-' }}</p>
+<p><strong>Автор:</strong> {{ le.author.full_name }}</p>
+<pre class="border p-3 bg-light">{{ le.body }}</pre>
+
+<h5>Исполнители:</h5>
+<ul>
+{% for r in le.recipients if r.role == 'executor' %}
+  <li>{{ r.user.full_name }}</li>
+{% endfor %}
+</ul>
+
+<h5>Ознакомление:</h5>
+<ul>
+{% for r in le.recipients if r.role == 'observer' %}
+  <li>{{ r.user.full_name }}</li>
+{% endfor %}
+</ul>
+
+<h5>Документы</h5>
+<ul>
+{% for d in le.documents %}
+  <li><a href="{{ url_for('static', filename=d.filepath) }}" target="_blank">{{ d.filename }}</a></li>
+{% else %}
+  <li class="text-muted">Нет документов</li>
+{% endfor %}
+</ul>
+
+<form method="post" enctype="multipart/form-data" action="{{ url_for('upload_letter_doc', letter_id=le.id) }}">
+  <input type="file" name="file" class="form-control mb-2" required>
+  <button class="btn btn-outline-success">Добавить документ</button>
+</form>
+
+<hr>
+
+<h5>Активности по письму</h5>
+<ul>
+{% for a in le.activities %}
+  <li><a href="{{ url_for('activity_view', activity_id=a.id) }}">{{ a.title }}</a></li>
+{% else %}
+  <li class="text-muted">Нет активностей</li>
+{% endfor %}
+</ul>
+
+<form method="post" action="{{ url_for('create_activity_from_letter', letter_id=le.id) }}">
+  <button class="btn btn-outline-primary">Создать активность на основе письма</button>
+</form>
+<h5 class="mt-4">📋 Активности по письму</h5>
+{% if le.activities %}
+  <ul class="list-group mb-3">
+    {% for a in le.activities %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <strong>{{ a.title }}</strong><br>
+          <small class="text-muted">{{ a.status }}</small>
+        </div>
+        <a href="{{ url_for('activity_view', activity_id=a.id) }}" class="btn btn-sm btn-outline-primary">
+          Открыть
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="text-muted">По этому письму пока нет активностей.</p>
+{% endif %}
+
+{% endblock %}

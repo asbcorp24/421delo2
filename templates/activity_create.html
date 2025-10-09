@@ -1,0 +1,42 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3>Создание активности</h3>
+
+<form method="post" class="card p-3 shadow-sm">
+  <div class="mb-3">
+    <label class="form-label">Тип активности</label>
+    <select name="type_id" class="form-select">
+      <option value="">-- не указано --</option>
+      {% for t in types %}
+        <option value="{{ t.id }}">{{ t.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Название</label>
+    <input type="text" name="title" class="form-control" required placeholder="Введите название активности">
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Описание</label>
+    <textarea name="description" class="form-control" rows="4" placeholder="Опишите, что нужно сделать"></textarea>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col">
+      <label class="form-label">Дата начала</label>
+      <input type="date" name="start_date" class="form-control">
+    </div>
+    <div class="col">
+      <label class="form-label">Дата окончания</label>
+      <input type="date" name="end_date" class="form-control">
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between">
+    <a href="{{ url_for('activities_page') }}" class="btn btn-secondary">Отмена</a>
+    <button class="btn btn-success">💾 Создать</button>
+  </div>
+</form>
+{% endblock %}
