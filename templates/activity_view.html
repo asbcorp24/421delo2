@@ -21,40 +21,43 @@
     {{ a.end_date.strftime('%d.%m.%Y') if a.end_date else '-' }}
   </li>
   <li class="list-group-item">
-    {% if a.end_date %}
-      {% set days_left = (a.end_date - now().date()).days %}
-      {% if days_left > 0 %}
-        ⏳ Осталось {{ days_left }} дн.
-      {% elif days_left == 0 %}
-        ⚠️ Срок сегодня!
-      {% else %}
-        ❌ Просрочено на {{ -days_left }} дн.
-      {% endif %}
-    {% else %}
-      <span class="text-muted">Дата окончания не указана</span>
-    {% endif %}
+  {% if a.end_date %}
+  {% set days_left = (a.end_date.date() - now().date()).days %}
+  <p><strong>До окончания:</strong>
+     {% if days_left >= 0 %}
+        {{ days_left }} дн.
+     {% else %}
+        <span class="text-danger">Просрочено на {{ days_left | abs }} дн.</span>
+     {% endif %}
+  </p>
+{% else %}
+  <p><em>Дата окончания не указана</em></p>
+{% endif %}
   </li>
 </ul>
 
 <hr>
+<h4>Журнал действий</h4>
 
-<h5>Журнал действий</h5>
-<ul class="list-group mb-3">
-  {% for l in a.logs %}
-    <li class="list-group-item">
-      <strong>{{ l.entry_date.strftime('%d.%m.%Y %H:%M') }}</strong>: {{ l.text }}
-    </li>
-  {% else %}
-    <li class="list-group-item text-muted">Пока нет записей</li>
+<form id="new-log-form" class="mb-3">
+  <div class="row g-2">
+    <div class="col-md-7">
+      <textarea name="text" class="form-control" placeholder="Новое действие..." required></textarea>
+    </div>
+    <div class="col-md-3">
+      <input type="datetime-local" name="entry_date" class="form-control" value="{{ now().strftime('%Y-%m-%dT%H:%M') }}">
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-outline-primary w-100">Добавить действие</button>
+    </div>
+  </div>
+</form>
+
+<ul id="log-list" class="list-group mb-3">
+  {% for log in a.logs if not log.parent_id %}
+    {% include 'partials/_log_item.html' with context %}
   {% endfor %}
 </ul>
-
-<form method="post" action="{{ url_for('add_activity_log', activity_id=a.id) }}" class="mb-3">
-  <label class="form-label">Дата записи (можно изменить)</label>
-  <input type="date" name="entry_date" class="form-control mb-2" value="{{ now().strftime('%Y-%m-%d') }}">
-  <textarea name="text" class="form-control" rows="2" placeholder="Добавить запись..." required></textarea>
-  <button class="btn btn-outline-primary mt-2">Добавить</button>
-</form>
 
 <hr>
 
@@ -104,4 +107,142 @@
     <li class="list-group-item text-muted">Нет связанных писем</li>
   {% endfor %}
 </ul>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+  // === Добавление корневого действия ===
+  const newLogForm = document.getElementById('new-log-form');
+  if (newLogForm) {
+    newLogForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const text = this.querySelector('textarea[name="text"]').value.trim();
+      const entry_date = this.querySelector('input[name="entry_date"]').value;
+      if (!text) return;
+
+      const formData = new FormData();
+      formData.append('text', text);
+      formData.append('entry_date', entry_date);
+
+      const res = await fetch(window.location.pathname + '/logs', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (data.success) {
+        const ul = document.getElementById('log-list');
+        ul.insertAdjacentHTML('beforeend', renderLogItem(data.log));
+        this.reset();
+      }
+    });
+  }
+
+  // === Делегирование событий для любого уровня вложенности ===
+  document.addEventListener('click', async function(e) {
+
+    // --- Переключение "выполнено"
+    if (e.target.classList.contains('toggle-done')) {
+      const li = e.target.closest('li');
+      if (!li) return;
+      const id = li.dataset.id;
+      const res = await fetch(`/logs/${id}/toggle_done`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        li.classList.toggle('text-decoration-line-through', data.is_done);
+        li.classList.toggle('text-muted', data.is_done);
+      }
+    }
+
+    // --- Добавление поддействия
+    if (e.target.classList.contains('add-child')) {
+      const li = e.target.closest('li');
+      if (!li) return;
+
+      // ищем поля ввода строго рядом с кнопкой
+      const wrapper = e.target.closest('.input-group');
+      if (!wrapper) {
+        console.warn('Не найден input-group для кнопки ➕');
+        return;
+      }
+
+      const textInput = wrapper.querySelector('.child-text');
+      const dateInput = wrapper.querySelector('.child-date');
+      if (!textInput || !dateInput) {
+        console.warn('Не найдены поля ввода поддействия');
+        return;
+      }
+
+      const text = textInput.value.trim();
+      const entry_date = dateInput.value;
+      if (!text) return;
+
+      const id = li.dataset.id;
+      const formData = new FormData();
+      formData.append('text', text);
+      formData.append('entry_date', entry_date);
+
+      const res = await fetch(`/logs/${id}/add_child`, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        let ul = li.querySelector('ul');
+        if (!ul) {
+          ul = document.createElement('ul');
+          ul.classList.add('mt-2', 'ps-4', 'border-start');
+          li.appendChild(ul);
+        }
+        ul.insertAdjacentHTML('beforeend', renderLogItem(data.child));
+        textInput.value = '';
+      }
+    }
+
+    // --- Удаление действия
+    if (e.target.classList.contains('delete-log')) {
+      const li = e.target.closest('li');
+      if (!li) return;
+      const id = li.dataset.id;
+      if (!confirm('Удалить это действие (и все поддействия)?')) return;
+
+      const res = await fetch(`/logs/${id}/delete`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        li.remove();
+      } else {
+        alert('Ошибка при удалении');
+      }
+    }
+  });
+
+  // === Рендер новой лог-записи ===
+  function renderLogItem(log) {
+    return `
+      <li class="list-group-item small" data-id="${log.id}">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <input type="checkbox" class="form-check-input me-2 toggle-done" ${log.is_done ? 'checked' : ''}>
+            <strong>${log.text}</strong>
+          </div>
+          <div>
+            <small class="text-muted">${log.entry_date || ''}</small>
+            <button class="btn btn-sm btn-outline-danger ms-2 delete-log">🗑</button>
+          </div>
+        </div>
+
+        <div class="mt-2">
+          <div class="input-group input-group-sm mb-1">
+            <input type="text" class="form-control child-text" placeholder="Новое поддействие...">
+            <input type="datetime-local" class="form-control child-date" value="${new Date().toISOString().slice(0,16)}">
+            <button class="btn btn-outline-secondary add-child">➕</button>
+          </div>
+        </div>
+      </li>
+    `;
+  }
+});
+</script>
+
+
+
+
+
+
+
 {% endblock %}

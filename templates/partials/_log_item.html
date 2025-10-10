@@ -1,10 +1,39 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
-</head>
-<body>
-$END$
-</body>
-</html>
+{% set _depth = _depth | default(0) %}
+{% if _depth < 10 %}
+<li class="list-group-item py-2 {% if log.is_done %}text-decoration-line-through text-muted{% endif %}" data-id="{{ log.id }}">
+  <div class="d-flex justify-content-between align-items-center">
+    <div>
+      <input type="checkbox" class="form-check-input me-2 toggle-done" {% if log.is_done %}checked{% endif %}>
+      <strong>{{ log.text }}</strong>
+      {% if log.parent_id %}
+        <span class="badge bg-info text-dark ms-2">подзадача</span>
+      {% endif %}
+      <br>
+      <small class="text-muted">{{ log.entry_date.strftime('%d.%m.%Y %H:%M') }}</small>
+    </div>
+
+    <!-- Кнопка добавить поддействие -->
+    <button class="btn btn-sm btn-outline-secondary add-child" data-log-id="{{ log.id }}">➕</button>
+  </div>
+
+  <!-- Дочерние поддействия -->
+{% if log.children and log.children|length > 0 %}
+  <ul class="mt-2 ps-4 border-start">
+    {% for child in log.children %}
+      {% with log=child, _depth=_depth + 1 %}
+        {% include 'partials/_log_item.html' %}
+      {% endwith %}
+    {% endfor %}
+  </ul>
+{% endif %}
+
+  <!-- Поле добавления нового поддействия -->
+  <div class="mt-2">
+    <div class="input-group input-group-sm mb-1">
+      <input type="text" class="form-control child-text" placeholder="Новое поддействие...">
+      <input type="date" class="form-control child-date" value="{{ datetime.utcnow().strftime('%Y-%m-%d') }}">
+      <button class="btn btn-outline-primary add-child-btn" data-log-id="{{ log.id }}">Добавить</button>
+    </div>
+  </div>
+</li>
+{% endif %}

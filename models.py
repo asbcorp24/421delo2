@@ -5,7 +5,7 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 # ВАЖНО: app.py должен создать db = SQLAlchemy(app) до этого импорта
-
+from datetime import datetime
 db = SQLAlchemy()  # создаём экземпляр, но не привязываем к app
 # --- Справочники ---
 
@@ -91,15 +91,13 @@ class Activity(db.Model):
         secondary=LetterActivityLink,
         back_populates="activities"
     )
+    logs = db.relationship(
+        "ActivityLog",
+        backref="activity",
+        cascade="all, delete-orphan",
+        lazy="joined"
+    )
 
-class ActivityLog(db.Model):
-    __tablename__ = "activity_logs"
-    id = db.Column(db.Integer, primary_key=True)
-    activity_id = db.Column(db.Integer, db.ForeignKey("activities.id"), nullable=False)
-    entry_date = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
-    text = db.Column(db.Text, nullable=False)
-
-    activity = db.relationship("Activity", backref="logs")
 
 
 class ActivityDocument(db.Model):
@@ -168,7 +166,24 @@ class LetterDocument(db.Model):
     letter_id = db.Column(db.Integer, db.ForeignKey("letters.id"), nullable=False)
     filename = db.Column(db.String(255), nullable=False)
     filepath = db.Column(db.String(255), nullable=False)
+class ActivityLog(db.Model):
+    __tablename__ = "activity_logs"
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activities.id"), nullable=False)
 
+    text = db.Column(db.Text, nullable=False)
+    entry_date = db.Column(db.DateTime, default=datetime.utcnow)
+
+    parent_id = db.Column(db.Integer, db.ForeignKey("activity_logs.id"))
+    is_done = db.Column(db.Boolean, default=False)
+
+    # 🔁 рекурсивная связь (родитель → дети)
+    children = db.relationship(
+        "ActivityLog",
+        backref=db.backref("parent", remote_side=[id]),
+        cascade="all, delete-orphan",
+        lazy="joined"
+    )
 __all__ = [
     "db",
     "Department",

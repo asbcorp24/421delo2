@@ -8,6 +8,7 @@ from flask import (
     Flask, request, jsonify, render_template, redirect,
     url_for, flash, send_from_directory, abort
 )
+from sqlalchemy.orm import joinedload
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
@@ -193,44 +194,45 @@ def  add_activity():
     flash(f"Активность #{a.id} создана")
     return redirect(url_for("activities_page"))
 
+
 @app.get("/activities/<int:activity_id>")
 @login_required
 def activity_view(activity_id: int):
-    a = Activity.query.get_or_404(activity_id)
-    return render_template("activity_view.html", title=f"Активность #{a.id}", a=a)
-
+    a = (
+        Activity.query
+        .options(
+            joinedload(Activity.logs)
+            .joinedload(ActivityLog.children)
+        )
+        .get_or_404(activity_id)
+    )
+    return render_template("activity_view.html", title=f"Активность #{a.id}", a=a,
+                           datetime=datetime  # 👈 вот эта строка добавляет datetime в шаблон
+                           )
 @app.post("/activities/<int:activity_id>/logs")
 @login_required
 def add_activity_log(activity_id: int):
     a = Activity.query.get_or_404(activity_id)
-
-    # Проверка прав
     if a.owner_id != current_user.id and current_user.role not in ("manager", "admin"):
         abort(403)
 
     text = request.form.get("text", "").strip()
-    entry_date_str = request.form.get("entry_date")  # дата из формы
-
     if not text:
-        flash("Текст лог-записи обязателен")
-        return redirect(url_for("activity_view", activity_id=activity_id))
+        return {"success": False, "error": "Текст пустой"}, 400
 
-    # Преобразуем дату, если указана
-    try:
-        if entry_date_str:
-            entry_date = datetime.strptime(entry_date_str, "%Y-%m-%d")
-        else:
-            entry_date = datetime.utcnow()
-    except ValueError:
-        entry_date = datetime.utcnow()
-
-    # Добавляем лог
-    al = ActivityLog(activity_id=a.id, text=text, entry_date=entry_date)
-    db.session.add(al)
+    log = ActivityLog(activity_id=a.id, text=text, entry_date=datetime.utcnow())
+    db.session.add(log)
     db.session.commit()
 
-    flash("Лог добавлен")
-    return redirect(url_for("activity_view", activity_id=activity_id))
+    return {
+        "success": True,
+        "log": {
+            "id": log.id,
+            "text": log.text,
+            "entry_date": log.entry_date.strftime("%d.%m.%Y %H:%M")
+        }
+    }
+
 @app.post("/activities/<int:activity_id>/upload")
 @login_required
 def upload_activity_document(activity_id: int):
@@ -755,6 +757,39 @@ def new_letter_from_activity(activity_id):
         from_activity=activity,
         now=datetime.now  # ← вот это добавляем
     )
+# ✅ AJAX: переключение статуса "выполнено"
+@app.post("/logs/<int:log_id>/toggle_done")
+@login_required
+def toggle_log_done(log_id: int):
+    log = ActivityLog.query.get_or_404(log_id)
+    log.is_done = not log.is_done
+    db.session.commit()
+    return {"success": True, "is_done": log.is_done}
+
+
+# ✅ AJAX: добавление поддействия
+@app.post("/logs/<int:log_id>/add_child")
+@login_required
+def add_child_log(log_id: int):
+    parent = ActivityLog.query.get_or_404(log_id)
+    text = request.form.get("text", "").strip()
+    if not text:
+        return {"success": False, "error": "Пустой текст"}, 400
+
+    child = ActivityLog(activity_id=parent.activity_id, parent_id=log_id, text=text)
+    db.session.add(child)
+    db.session.commit()
+
+    return {
+        "success": True,
+        "child": {
+            "id": child.id,
+            "text": child.text,
+            "is_done": child.is_done,
+            "entry_date": child.entry_date.strftime("%d.%m.%Y %H:%M")
+        }
+    }
+
 @app.context_processor
 def inject_now():
     from datetime import datetime
