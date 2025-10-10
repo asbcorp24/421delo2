@@ -108,9 +108,9 @@
   {% endfor %}
 </ul>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
 
-  // === Добавление корневого действия ===
+  // добавление корневого лога (оставь как у тебя было)
   const newLogForm = document.getElementById('new-log-form');
   if (newLogForm) {
     newLogForm.addEventListener('submit', async function(e) {
@@ -119,68 +119,60 @@ document.addEventListener('DOMContentLoaded', function() {
       const entry_date = this.querySelector('input[name="entry_date"]').value;
       if (!text) return;
 
-      const formData = new FormData();
-      formData.append('text', text);
-      formData.append('entry_date', entry_date);
-
       const res = await fetch(window.location.pathname + '/logs', {
         method: 'POST',
-        body: formData
+        body: new FormData(newLogForm)
       });
       const data = await res.json();
       if (data.success) {
-        const ul = document.getElementById('log-list');
-        ul.insertAdjacentHTML('beforeend', renderLogItem(data.log));
+        document.getElementById('log-list')
+          .insertAdjacentHTML('beforeend', renderLogItem(data.log));
         this.reset();
       }
     });
   }
 
-  // === Делегирование событий для любого уровня вложенности ===
+  // делегирование кликов
   document.addEventListener('click', async function(e) {
 
-    // --- Переключение "выполнено"
+    // --- отметка "выполнено"
     if (e.target.classList.contains('toggle-done')) {
-      const li = e.target.closest('li');
+      const li = e.target.closest('li[data-id]');
       if (!li) return;
       const id = li.dataset.id;
+
       const res = await fetch(`/logs/${id}/toggle_done`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         li.classList.toggle('text-decoration-line-through', data.is_done);
         li.classList.toggle('text-muted', data.is_done);
       }
+      return;
     }
 
-    // --- Добавление поддействия
-    if (e.target.classList.contains('add-child')) {
-      const li = e.target.closest('li');
+    // --- добавление поддействия (поддерживаем обе кнопки)
+    if (e.target.classList.contains('add-child') || e.target.classList.contains('add-child-btn')) {
+      const li = e.target.closest('li[data-id]');
       if (!li) return;
+      const id = li.dataset.id;
 
-      // ищем поля ввода строго рядом с кнопкой
-      const wrapper = e.target.closest('.input-group');
-      if (!wrapper) {
-        console.warn('Не найден input-group для кнопки ➕');
-        return;
-      }
+      // ищем поля рядом с нажатой кнопкой
+      const group = e.target.closest('.input-group');
+      if (!group) { console.warn('Не найден .input-group'); return; }
 
-      const textInput = wrapper.querySelector('.child-text');
-      const dateInput = wrapper.querySelector('.child-date');
-      if (!textInput || !dateInput) {
-        console.warn('Не найдены поля ввода поддействия');
-        return;
-      }
+      const textInput = group.querySelector('.child-text');
+      const dateInput = group.querySelector('.child-date');
+      if (!textInput || !dateInput) { console.warn('Нет .child-text или .child-date'); return; }
 
       const text = textInput.value.trim();
-      const entry_date = dateInput.value;
+      const entry_date = dateInput.value; // формат от <input type="datetime-local">
       if (!text) return;
 
-      const id = li.dataset.id;
-      const formData = new FormData();
-      formData.append('text', text);
-      formData.append('entry_date', entry_date);
+      const fd = new FormData();
+      fd.append('text', text);
+      fd.append('entry_date', entry_date);
 
-      const res = await fetch(`/logs/${id}/add_child`, { method: 'POST', body: formData });
+      const res = await fetch(`/logs/${id}/add_child`, { method: 'POST', body: fd });
       const data = await res.json();
       if (data.success) {
         let ul = li.querySelector('ul');
@@ -191,27 +183,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         ul.insertAdjacentHTML('beforeend', renderLogItem(data.child));
         textInput.value = '';
+      } else {
+        alert('Ошибка при добавлении поддействия');
       }
+      return;
     }
 
-    // --- Удаление действия
+    // --- удаление лога (если у тебя есть кнопка .delete-log)
     if (e.target.classList.contains('delete-log')) {
-      const li = e.target.closest('li');
+      const li = e.target.closest('li[data-id]');
       if (!li) return;
       const id = li.dataset.id;
-      if (!confirm('Удалить это действие (и все поддействия)?')) return;
+      if (!confirm('Удалить это действие и его поддействия?')) return;
 
       const res = await fetch(`/logs/${id}/delete`, { method: 'POST' });
       const data = await res.json();
-      if (data.success) {
-        li.remove();
-      } else {
-        alert('Ошибка при удалении');
-      }
+      if (data.success) li.remove();
+      return;
     }
   });
 
-  // === Рендер новой лог-записи ===
+  // генератор HTML для одного лога
   function renderLogItem(log) {
     return `
       <li class="list-group-item small" data-id="${log.id}">
@@ -222,22 +214,21 @@ document.addEventListener('DOMContentLoaded', function() {
           </div>
           <div>
             <small class="text-muted">${log.entry_date || ''}</small>
-            <button class="btn btn-sm btn-outline-danger ms-2 delete-log">🗑</button>
+            <button type="button" class="btn btn-sm btn-outline-danger ms-2 delete-log">🗑</button>
           </div>
         </div>
-
         <div class="mt-2">
           <div class="input-group input-group-sm mb-1">
             <input type="text" class="form-control child-text" placeholder="Новое поддействие...">
             <input type="datetime-local" class="form-control child-date" value="${new Date().toISOString().slice(0,16)}">
-            <button class="btn btn-outline-secondary add-child">➕</button>
+            <button type="button" class="btn btn-outline-primary add-child-btn">Добавить</button>
           </div>
         </div>
-      </li>
-    `;
+      </li>`;
   }
 });
 </script>
+
 
 
 

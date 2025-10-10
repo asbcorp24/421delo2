@@ -10,10 +10,15 @@
       {% endif %}
       <br>
       <small class="text-muted">{{ log.entry_date.strftime('%d.%m.%Y %H:%M') }}</small>
+      <button type="button"
+        class="btn btn-sm btn-outline-danger delete-log ms-2"
+        title="Удалить действие">
+  🗑
+</button>
     </div>
 
     <!-- Кнопка добавить поддействие -->
-    <button class="btn btn-sm btn-outline-secondary add-child" data-log-id="{{ log.id }}">➕</button>
+
   </div>
 
   <!-- Дочерние поддействия -->
