@@ -6,7 +6,15 @@
     <form method="post" action="{{ url_for('login_form') }}">
       <div class="mb-3">
         <label class="form-label">Логин</label>
-        <input type="text" name="username" class="form-control" required>
+        <select name="username" class="form-select" required>
+          <option value="">-- выберите себя --</option>
+          {% if superadmin_login %}
+          <option value="{{ superadmin_login }}">Суперадминистратор</option>
+          {% endif %}
+          {% for user in login_users %}
+          <option value="{{ user.username }}">{{ user.full_name }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="mb-3">
         <label class="form-label">Пароль</label>

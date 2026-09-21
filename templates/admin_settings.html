@@ -1,0 +1,89 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3>Настройки</h3>
+
+<form method="post" action="{{ url_for('save_admin_settings') }}" class="card p-3 shadow-sm">
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Префикс номера письма по умолчанию</label>
+      <input type="text" name="letter_prefix" class="form-control" value="{{ letter_prefix }}">
+      <div class="form-text">Используется только для сотрудников без отдела или для отдела, в котором не задан собственный префикс.</div>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Префикс номера служебной записки по умолчанию</label>
+      <input type="text" name="memo_prefix" class="form-control" value="{{ memo_prefix }}" required>
+      <div class="form-text">Используется только для отдела, в котором не задан собственный префикс.</div>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Стартовый номер для писем</label>
+      <input type="number" min="1" step="1" name="letter_start_number" class="form-control" value="{{ letter_start_number }}" required>
+      <div class="form-text">С какого числа начинать автоматическую нумерацию писем.</div>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Стартовый номер для служебных записок</label>
+      <input type="number" min="1" step="1" name="memo_start_number" class="form-control" value="{{ memo_start_number }}" required>
+      <div class="form-text">С какого числа начинать автоматическую нумерацию служебных записок.</div>
+    </div>
+
+    <div class="col-12">
+      <hr>
+      <h5>Префиксы отделов</h5>
+      <div class="form-text mb-2">Эти значения имеют приоритет над настройками по умолчанию. Оставьте поле пустым, чтобы использовать общий префикс.</div>
+      <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Отдел</th>
+              <th>Префикс письма</th>
+              <th>Стартовый номер письма</th>
+              <th>Префикс служебной записки</th>
+              <th>Стартовый номер служебной</th>
+              <th>Группа нумерации писем</th>
+              <th>Группа нумерации служебных</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for department in departments %}
+            <tr>
+              <td>{{ department.name }}</td>
+              <td><input type="text" name="department_letter_prefix_{{ department.id }}" class="form-control" value="{{ department.letter_prefix or '' }}" placeholder="Например, ОТД"></td>
+              <td><input type="number" min="1" step="1" name="department_letter_start_number_{{ department.id }}" class="form-control" value="{{ department.letter_start_number or '' }}" placeholder="{{ letter_start_number }}"></td>
+              <td><input type="text" name="department_memo_prefix_{{ department.id }}" class="form-control" value="{{ department.memo_prefix or '' }}" placeholder="Например, 421"></td>
+              <td><input type="number" min="1" step="1" name="department_memo_start_number_{{ department.id }}" class="form-control" value="{{ department.memo_start_number or '' }}" placeholder="{{ memo_start_number }}"></td>
+              <td><input type="text" name="department_letter_number_series_{{ department.id }}" class="form-control" value="{{ department.letter_number_series or '' }}" placeholder="Например, общая-1"></td>
+              <td><input type="text" name="department_memo_number_series_{{ department.id }}" class="form-control" value="{{ department.memo_number_series or '' }}" placeholder="Например, общая-1"></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-muted">Сначала добавьте отделы в справочник.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <button class="btn btn-primary w-100">Сохранить</button>
+    </div>
+  </div>
+</form>
+
+<section class="card p-3 shadow-sm mt-4 border-info">
+  <h5 class="text-info">Интеграция с внешней CRM</h5>
+  <p class="text-muted mb-2">Токен нужен внешней системе для чтения задач, планов и служебных записок через API. Не публикуйте его в браузере, чатах и общих документах.</p>
+  {% if integration_api_token %}
+  <label class="form-label" for="integration-api-token">Текущий API-токен</label>
+  <div class="input-group mb-2">
+    <input id="integration-api-token" class="form-control font-monospace" value="{{ integration_api_token }}" readonly>
+    <button type="button" class="btn btn-outline-info" onclick="navigator.clipboard.writeText(document.getElementById('integration-api-token').value)">Копировать</button>
+  </div>
+  {% else %}
+  <div class="alert alert-warning py-2">Токен ещё не создан. Внешняя CRM не сможет подключиться.</div>
+  {% endif %}
+  <form method="post" action="{{ url_for('regenerate_integration_api_token') }}" onsubmit="return confirm('Создать новый токен? Старый токен сразу перестанет работать.')">
+    <button class="btn btn-outline-warning">{{ 'Перевыпустить токен' if integration_api_token else 'Создать токен' }}</button>
+  </form>
+</section>
+{% endblock %}

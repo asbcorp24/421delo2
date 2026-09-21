@@ -1,0 +1,76 @@
+{% extends 'layout.html' %}
+{% block title %}Поиск документов{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <h3>🔍 Единый поиск</h3>
+  <form method="get" action="{{ url_for('global_search') }}" class="mb-3">
+    <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Введите слово или фразу..." autofocus>
+  </form>
+
+  {% if q %}
+    {% if task_results or letter_results or memo_results or results_acts or results_lets %}
+      <h5 class="text-info">Результаты для «{{ q }}»</h5>
+
+      {% if task_results %}
+      <h6 class="mt-4 text-info">📋 Задачи</h6>
+      <div class="list-group mb-3">{% for item in task_results %}<a class="list-group-item list-group-item-action" href="{{ url_for('activity_view', activity_id=item.id) }}"><strong>№{{ item.id }}. {{ item.title }}</strong><div class="small text-muted">{{ item.description or item.direction or 'Без описания' }}</div></a>{% endfor %}</div>
+      {% endif %}
+
+      {% if letter_results %}
+      <h6 class="mt-4 text-success">📨 Письма</h6>
+      <div class="list-group mb-3">{% for item in letter_results %}<a class="list-group-item list-group-item-action" href="{{ url_for('letter_view', letter_id=item.id) }}"><strong>№{{ item.reg_number or item.id }}. {{ item.subject }}</strong><div class="small text-muted">{{ item.body or 'Без содержания' }}</div></a>{% endfor %}</div>
+      {% endif %}
+
+      {% if memo_results %}
+      <h6 class="mt-4 text-warning">📝 Служебные записки</h6>
+      <div class="list-group mb-3">{% for item in memo_results %}<a class="list-group-item list-group-item-action" href="{{ url_for('memo_view', memo_id=item.id) }}"><strong>№{{ item.reg_number or item.id }}. {{ item.subject }}</strong><div class="small text-muted">{{ item.body or 'Без содержания' }}</div></a>{% endfor %}</div>
+      {% endif %}
+
+     {% if results_acts %}
+<h6 class="mt-4 text-warning">📂 Документы активностей</h6>
+<table class="table table-hover">
+  <thead><tr><th>Активность</th><th>Документ</th><th>Фрагмент</th></tr></thead>
+  <tbody>
+  {% for r in results_acts %}
+    <tr>
+      <td>
+        {% if r.parent_id %}
+          <a href="{{ url_for('activity_view', activity_id=r.parent_id) }}">
+            {{ r.parent_title or ('#' ~ r.parent_id) }}
+          </a>
+        {% else %}
+          <span class="text-muted">[нет активности]</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{{ url_for('download_activity_document', doc_id=r.doc_id) }}">{{ r.filename }}</a>
+      </td>
+      <td>{{ r.snippet|safe }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+
+      {% if results_lets %}
+      <h6 class="mt-4 text-success">📨 Документы писем</h6>
+      <table class="table table-hover">
+        <thead><tr><th>Письмо</th><th>Документ</th><th>Фрагмент</th></tr></thead>
+        <tbody>
+        {% for r in results_lets %}
+          <tr>
+            <td><a href="{{ url_for('letter_view', letter_id=r.parent_id) }}">{{ r.parent_title or ('#' ~ r.parent_id) }}</a></td>
+            <td><a href="{{ url_for('download_letter_document', doc_id=r.doc_id) }}">{{ r.filename }}</a></td>
+            <td>{{ r.snippet|safe }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    {% else %}
+      <div class="alert alert-warning">Ничего не найдено</div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

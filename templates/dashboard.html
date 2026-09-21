@@ -1,20 +1,23 @@
 {% extends 'layout.html' %}
 {% block content %}
 <h3>Главная панель</h3>
+
 <div class="row mt-3">
   <div class="col-md-4">
     <div class="card shadow-sm p-3">
-      <h5>Мои активности: {{ my_acts }}</h5>
+      <h5>Мои задачи: {{ my_acts }}</h5>
       <a href="{{ url_for('activities_page') }}" class="btn btn-outline-primary btn-sm mt-2">Открыть</a>
     </div>
   </div>
+
   <div class="col-md-4">
     <div class="card shadow-sm p-3">
       <h5>Мои письма: {{ my_letters }}</h5>
       <a href="{{ url_for('letters_page') }}" class="btn btn-outline-primary btn-sm mt-2">Открыть</a>
     </div>
   </div>
-  {% if current_user.role in ['manager','admin'] %}
+
+  {% if current_user.role in ['manager', 'admin', 'superadmin'] %}
   <div class="col-md-4">
     <div class="card shadow-sm p-3">
       <h5>Ждут утверждения: {{ pending_approval }}</h5>
@@ -23,4 +26,119 @@
   </div>
   {% endif %}
 </div>
+
+<div class="card shadow-sm mt-4" style="background: rgba(10, 20, 25, 0.95); color: #e0faff; border: 1px solid rgba(0, 255, 255, 0.2); box-shadow: 0 0 25px rgba(0, 255, 255, 0.25);">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+      <h4 class="mb-0">Задачи</h4>
+      <a href="{{ url_for('activities_page') }}" class="btn btn-sm btn-outline-primary">Все задачи</a>
+    </div>
+
+    <form method="get" class="row g-2 align-items-end mb-3">
+      <div class="col-auto">
+        <label for="dashboard_date_from" class="form-label">С</label>
+        <input type="date" id="dashboard_date_from" name="date_from" class="form-control" value="{{ date_from }}">
+      </div>
+
+      <div class="col-auto">
+        <label for="dashboard_date_to" class="form-label">По</label>
+        <input type="date" id="dashboard_date_to" name="date_to" class="form-control" value="{{ date_to }}">
+      </div>
+
+      <div class="col-auto">
+        <label for="dashboard_status" class="form-label">Статус</label>
+        <select id="dashboard_status" name="status" class="form-select">
+          {% for code, label in status_filters %}
+          <option value="{{ code }}" {% if selected_status == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {% if filter_users %}
+      <div class="col-auto">
+        <label for="dashboard_owner_id" class="form-label">На пользователя</label>
+        <select id="dashboard_owner_id" name="owner_id" class="form-select" {% if my_only %}disabled{% endif %}>
+          <option value="">Все</option>
+          {% for user in filter_users %}
+          <option value="{{ user.id }}" {% if owner_id == user.id|string %}selected{% endif %}>{{ user.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-auto">
+        <div class="form-check mt-4 pt-2">
+          <input class="form-check-input" type="checkbox" value="1" id="dashboard_my_only" name="my_only" {% if my_only %}checked{% endif %}>
+          <label class="form-check-label" for="dashboard_my_only">Свои задачи</label>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary">Фильтровать</button>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Сбросить</a>
+      </div>
+    </form>
+
+    {% if dashboard_tasks %}
+    <div class="table-responsive">
+      <table class="table table-striped align-middle shadow-sm mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>№</th>
+            <th>Тема</th>
+            <th>Название</th>
+            <th>Тип</th>
+            <th>Исходный документ</th>
+            <th>Ответственный</th>
+            <th>Статус</th>
+            <th>Начало</th>
+            <th>Окончание</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for task in dashboard_tasks %}
+          {% set meta = get_status_meta(task.status) %}
+          <tr>
+            <td>{{ task.id }}</td>
+            <td>{{ task.direction or '-' }}</td>
+            <td>{{ task.title }}</td>
+            <td>{{ task.type.name if task.type else '-' }}</td>
+            <td>{{ task.outgoing_document or '-' }}</td>
+            <td>{% if task.owner_id == -1 %}Суперадминистратор{% else %}{{ task.owner.full_name if task.owner else '-' }}{% endif %}</td>
+            <td>
+              <span class="badge {{ meta.class }}" {% if meta.style %}style="{{ meta.style }}"{% endif %}>{{ meta.label }}</span>
+            </td>
+            <td>{{ task.start_date.strftime('%d.%m.%Y') if task.start_date else '' }}</td>
+            <td>{{ task.end_date.strftime('%d.%m.%Y') if task.end_date else '' }}</td>
+            <td class="text-nowrap">
+              <a href="{{ url_for('activity_view', activity_id=task.id) }}" class="btn btn-sm btn-outline-primary">Открыть</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">Задач пока нет.</p>
+    {% endif %}
+  </div>
+</div>
+{% if filter_users %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const myOnly = document.getElementById('dashboard_my_only');
+  const owner = document.getElementById('dashboard_owner_id');
+  if (!myOnly || !owner) return;
+
+  const syncOwnerState = () => {
+    owner.disabled = myOnly.checked;
+    if (myOnly.checked) owner.value = '';
+  };
+
+  myOnly.addEventListener('change', syncOwnerState);
+  syncOwnerState();
+});
+</script>
+{% endif %}
 {% endblock %}

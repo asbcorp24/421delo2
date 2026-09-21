@@ -1,0 +1,48 @@
+{% extends 'layout.html' %}
+{% block content %}
+<style>
+  .audit-table { font-size: .83rem; border: 1px solid rgba(13, 202, 240, .28); border-radius: .65rem; overflow: hidden; }
+  .audit-table th { font-size: .7rem; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
+  .audit-table td, .audit-table th { padding: .5rem .55rem; vertical-align: top; }
+</style>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <div>
+    <h3 class="mb-1">Аудит задач</h3>
+    <div class="text-muted">История действий по задачам: кто, что и когда изменил.</div>
+  </div>
+  <a class="btn btn-outline-info" href="{{ url_for('activities_page') }}"><i class="bi bi-list-task"></i> Задачи</a>
+</div>
+
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-sm-6 col-lg-2"><label class="form-label">С</label><input type="date" name="date_from" class="form-control" value="{{ date_from }}"></div>
+    <div class="col-sm-6 col-lg-2"><label class="form-label">По</label><input type="date" name="date_to" class="form-control" value="{{ date_to }}"></div>
+    <div class="col-sm-6 col-lg-2"><label class="form-label">№ задачи</label><input type="number" name="activity_id" class="form-control" value="{{ activity_id }}"></div>
+    <div class="col-sm-6 col-lg-2"><label class="form-label">Автор</label><select name="author_id" class="form-select"><option value="">Все</option>{% for user in users %}<option value="{{ user.id }}" {% if author_id == user.id|string %}selected{% endif %}>{{ user.full_name }}</option>{% endfor %}</select></div>
+    <div class="col-sm-6 col-lg-2"><label class="form-label">Действие</label><select name="action" class="form-select"><option value="">Все</option>{% for value in action_options %}<option value="{{ value }}" {% if action == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+    <div class="col-sm-6 col-lg-2"><label class="form-label">Поиск</label><input name="search" class="form-control" value="{{ search }}" placeholder="Задача или текст"></div>
+    <div class="col-12"><button class="btn btn-primary">Фильтровать</button> <a class="btn btn-secondary" href="{{ url_for('activities_audit') }}">Сбросить</a></div>
+  </div>
+</form>
+
+<div class="table-responsive audit-table shadow-sm">
+  <table class="table table-striped align-middle mb-0">
+    <thead class="table-dark"><tr><th>Дата и время</th><th>Задача</th><th>Действие</th><th>Что изменено</th><th>Автор</th><th></th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="text-nowrap">{{ row.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+        <td><strong>#{{ row.activity_id }}</strong></td>
+        <td><span class="badge text-bg-info">{{ row.action }}</span></td>
+        <td>{{ row.details }}</td>
+        <td>{{ row.author.full_name if row.author else 'Система' }}</td>
+        <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('activity_view', activity_id=row.activity_id) }}">Открыть</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted py-4">За выбранный период действий нет.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="text-muted small mt-2">Показано не более 1000 последних записей.</div>
+{% endblock %}

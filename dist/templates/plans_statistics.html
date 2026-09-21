@@ -1,0 +1,78 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container mt-4">
+  <h3>📊 Аналитика по планам</h3>
+  <hr class="border-info">
+
+  <div class="row text-center mb-4">
+    <div class="col-md-4">
+      <div class="p-3 border border-info rounded-3 shadow-sm bg-dark text-info">
+        <h5>✅ Средний процент выполнения</h5>
+        <h2 class="text-light mt-2">{{ avg_completion }}%</h2>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="p-3 border border-danger rounded-3 shadow-sm bg-dark text-danger">
+        <h5>🔴 Просроченных активностей</h5>
+        <h2 class="text-light mt-2">{{ overdue_count }}</h2>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="p-3 border border-warning rounded-3 shadow-sm bg-dark text-warning">
+        <h5>🧮 Среднее действий на исполнителя</h5>
+        <h2 class="text-light mt-2">{{ avg_actions }}</h2>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-dark border-info p-3 mb-4">
+    <h5 class="text-info">📈 Количество планов по месяцам</h5>
+    <canvas id="plansChart" height="90"></canvas>
+  </div>
+
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const ctx = document.getElementById('plansChart');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: {{ months|tojson }},
+      datasets: [{
+        label: 'Количество планов',
+        data: {{ plan_counts|tojson }},
+        fill: true,
+        borderColor: '#00e0ff',
+        backgroundColor: 'rgba(0,255,255,0.08)',
+        tension: 0.3,
+        pointRadius: 5,
+        pointBackgroundColor: '#00ffff',
+        pointBorderWidth: 2,
+      }]
+    },
+    options: {
+      scales: {
+        x: {
+          ticks: { color: '#00e0ff' },
+          grid: { color: 'rgba(0,255,255,0.1)' }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#00e0ff' },
+          grid: { color: 'rgba(0,255,255,0.1)' }
+        }
+      },
+      plugins: {
+        legend: {
+          labels: { color: '#00e0ff' }
+        }
+      }
+    }
+  });
+});
+</script>
+{% endblock %}

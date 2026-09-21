@@ -1,0 +1,18 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container py-4">
+  <h3>📤 Загрузка нового документа</h3>
+  <form method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label class="form-label">Описание</label>
+      <textarea name="description" class="form-control" rows="2"></textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Выберите файл</label>
+      <input type="file" name="file" class="form-control" required>
+    </div>
+    <button class="btn btn-success">💾 Загрузить</button>
+    <a href="{{ url_for('files_list') }}" class="btn btn-secondary">Назад</a>
+  </form>
+</div>
+{% endblock %}

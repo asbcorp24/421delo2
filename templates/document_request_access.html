@@ -1,0 +1,18 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container py-5 text-center">
+  <h2 class="text-danger mb-3"><i class="bi bi-lock-fill"></i> Доступ к документу запрещён</h2>
+  <p class="lead mb-4">У вас нет прав на просмотр документа <strong>{{ doc.filename }}</strong>.</p>
+
+  <p>Автор документа: <strong>{{ author.full_name }}</strong></p>
+  <p>Вы можете отправить автору запрос на доступ.</p>
+
+  <form action="{{ url_for('request_document_access', doc_type=doc_type, doc_id=doc.id) }}" method="post" class="mt-4">
+    <textarea name="message" class="form-control mb-3" placeholder="Ваше сообщение автору..." rows="3"></textarea>
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-envelope"></i> Отправить запрос автору
+    </button>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary ms-2">На главную</a>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container py-4">
+  <h3>📋 Доска заданий</h3>
+
+  {% if current_user.role in ['admin','superadmin'] %}
+  <!-- 🔘 Кнопка показать/скрыть панель -->
+  <button class="btn btn-outline-info mb-3" id="toggleAddPanel">
+    ➕ Новое задание
+  </button>
+
+  <!-- 📦 Панель добавления задания -->
+  <div id="addTaskPanel" class="p-3 border rounded bg-dark bg-opacity-25" style="display:none;">
+    <form method="post" action="{{ url_for('add_task') }}">
+      <div class="row g-2">
+        <div class="col-md-3">
+          <input type="text" name="title" class="form-control" placeholder="Название задания" required>
+        </div>
+        <div class="col-md-3">
+          <select name="assigned_to" class="form-select" multiple required size="4">
+            {% for u in users %}
+              <option value="{{ u.id }}">{{ u.full_name }}</option>
+            {% endfor %}
+          </select>
+          <small class="text-info">Можно выбрать несколько (Ctrl + Click)</small>
+        </div>
+        <div class="col-md-2">
+          <input type="date" name="start_date" class="form-control" required>
+        </div>
+        <div class="col-md-2">
+          <input type="date" name="end_date" class="form-control" required>
+        </div>
+        <div class="col-md-12 mt-2">
+          <textarea name="description" class="form-control" placeholder="Описание (необязательно)" rows="2"></textarea>
+        </div>
+        <div class="col-md-2 mt-2">
+          <button class="btn btn-primary w-100">💾 Добавить</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("toggleAddPanel");
+    const panel = document.getElementById("addTaskPanel");
+
+    btn.addEventListener("click", () => {
+      const visible = panel.style.display === "block";
+      panel.style.display = visible ? "none" : "block";
+      btn.innerHTML = visible ? "➕ Новое задание" : "✖️ Скрыть форму";
+    });
+  });
+  </script>
+  {% endif %}
+
+
+ <table class="table table-hover">
+  <thead>
+    <tr>
+      <th>Задание</th>
+      <th>Исполнители</th>
+      <th>Период</th>
+      <th>Автор</th>
+      <th>Статус</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in tasks %}
+      {% if t.all_done %}
+        {% set row_class = "table-success" %}
+      {% elif t.expired %}
+        {% set row_class = "table-danger" %}
+      {% else %}
+        {% set row_class = "table-warning" %}
+      {% endif %}
+
+      <tr class="{{ row_class }}">
+        <td>
+          <strong>{{ t.title }}</strong><br>
+          <small>{{ t.description or '' }}</small>
+        </td>
+
+        <td>
+          {% for a in t.assignees %}
+            <div>
+              {% if a.is_done %}
+                ✅ {{ a.user.full_name }}
+              {% else %}
+                ⏳ {{ a.user.full_name }}
+              {% endif %}
+              {% if a.user_id == current_user.id %}
+              <form method="post" action="{{ url_for('toggle_task', task_id=t.id) }}" style="display:inline;">
+                <button class="btn btn-sm {% if a.is_done %}btn-outline-warning{% else %}btn-outline-success{% endif %}">
+                  {% if a.is_done %}Отменить{% else %}Выполнено{% endif %}
+                </button>
+              </form>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </td>
+
+        <td>{{ t.start_date }} — {{ t.end_date }}</td>
+
+        <!-- 🧩 Новый столбец — Автор -->
+        <td>
+          {% if t.creator %}
+            👤 {{ t.creator.full_name }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+
+        <td>
+          {% if t.all_done %}
+            ✅ Все выполнили
+          {% elif t.expired %}
+            🔴 Просрочено
+          {% else %}
+            🟡 В процессе
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+  </table>
+</div>
+{% endblock %}

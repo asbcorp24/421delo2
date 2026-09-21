@@ -1,0 +1,75 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Отправка уведомления</h3>
+  <a href="{{ url_for('user_notifications_page') }}" class="btn btn-outline-info">Мои уведомления</a>
+</div>
+
+<form method="post" class="card bg-dark border-info p-4">
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label" for="target-type">Кому</label>
+      <select id="target-type" name="target_type" class="form-select">
+        <option value="user">Конкретному сотруднику</option>
+        <option value="department">Отделу</option>
+        <option value="all">Всем пользователям</option>
+      </select>
+    </div>
+    <div class="col-md-8" id="user-target">
+      <label class="form-label" for="user-id">Сотрудник</label>
+      <select id="user-id" name="target_id" class="form-select">
+        <option value="">Выберите сотрудника</option>
+        {% for user in users %}
+        <option value="{{ user.id }}">{{ user.full_name }}{% if user.department %} ({{ user.department.name }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-8 d-none" id="department-target">
+      <label class="form-label" for="department-id">Отдел</label>
+      <select id="department-id" class="form-select">
+        <option value="">Выберите отдел</option>
+        {% for department in departments %}
+        <option value="{{ department.id }}">{{ department.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12">
+      <label class="form-label" for="notification-title">Заголовок</label>
+      <input id="notification-title" type="text" name="title" class="form-control" maxlength="180" required placeholder="Например: Важная информация">
+    </div>
+    <div class="col-12">
+      <label class="form-label" for="notification-message">Текст уведомления</label>
+      <textarea id="notification-message" name="message" class="form-control" rows="5" required placeholder="Введите текст уведомления"></textarea>
+    </div>
+    <div class="col-12 d-flex gap-2">
+      <button class="btn btn-primary">Отправить</button>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Отмена</a>
+    </div>
+  </div>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const targetType = document.getElementById('target-type');
+  const userTarget = document.getElementById('user-target');
+  const departmentTarget = document.getElementById('department-target');
+  const userId = document.getElementById('user-id');
+  const departmentId = document.getElementById('department-id');
+
+  function syncRecipient() {
+    const isUser = targetType.value === 'user';
+    const isDepartment = targetType.value === 'department';
+    userTarget.classList.toggle('d-none', !isUser);
+    departmentTarget.classList.toggle('d-none', !isDepartment);
+    userId.required = isUser;
+    departmentId.required = isDepartment;
+    if (isDepartment) userId.name = '';
+    else userId.name = 'target_id';
+    if (isDepartment) departmentId.name = 'target_id';
+    else departmentId.name = '';
+  }
+  targetType.addEventListener('change', syncRecipient);
+  syncRecipient();
+});
+</script>
+{% endblock %}

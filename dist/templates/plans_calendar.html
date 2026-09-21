@@ -1,0 +1,114 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container mt-4">
+  <h3>📅 Календарь активностей</h3>
+
+  <!-- 🔹 Фильтр статусов -->
+  <div id="status-filters" class="d-flex flex-wrap gap-3 mb-3 mt-3">
+    <label class="form-check-label text-warning">
+      <input class="form-check-input me-2 status-check" type="checkbox" value="open" checked> В работе
+    </label>
+    <label class="form-check-label text-success">
+      <input class="form-check-input me-2 status-check" type="checkbox" value="done" checked> Завершено
+    </label>
+    <label class="form-check-label text-info">
+      <input class="form-check-input me-2 status-check" type="checkbox" value="approved" checked> Утверждено
+    </label>
+    <label class="form-check-label text-danger">
+      <input class="form-check-input me-2 status-check" type="checkbox" value="rejected" checked> Отклонено
+    </label>
+  </div>
+
+  <div id="calendar" style="margin-top: 20px;"></div>
+</div>
+
+<!-- ✅ FullCalendar -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const calendarEl = document.getElementById("calendar");
+
+  // === Создаём календарь ===
+  const calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: "dayGridMonth",
+    locale: "ru",
+    height: "auto",
+    displayEventTime: false,
+    headerToolbar: {
+      left: "prev,next today",
+      center: "title",
+      right: "dayGridMonth,timeGridWeek,timeGridDay"
+    },
+    events: getEventsUrl(),
+    eventClick: showEventModal,
+    eventDidMount: styleEvent
+  });
+
+  calendar.render();
+
+  // === Фильтрация событий ===
+  document.querySelectorAll(".status-check").forEach(cb => {
+    cb.addEventListener("change", () => {
+      calendar.removeAllEvents();
+      calendar.refetchEvents();
+    });
+  });
+
+  // === Генерация URL для фильтров ===
+  function getEventsUrl() {
+    const selectedStatuses = Array.from(document.querySelectorAll(".status-check:checked"))
+      .map(cb => cb.value)
+      .join(",");
+    return `/api/activities/events?statuses=${selectedStatuses}`;
+  }
+
+  // === Переопределяем загрузку событий ===
+  calendar.setOption("events", function(fetchInfo, successCallback, failureCallback) {
+    fetch(getEventsUrl())
+      .then(r => r.json())
+      .then(data => successCallback(data))
+      .catch(err => failureCallback(err));
+  });
+
+  // === Модальное окно по клику ===
+  function showEventModal(info) {
+    const e = info.event;
+    const html = `
+      <div class='p-3'>
+        <h5 class='text-info mb-2'>${e.title}</h5>
+        <p><b>Начало:</b> ${e.startStr}<br>
+           <b>Окончание:</b> ${e.endStr}</p>
+        <p><b>Статус:</b> <span class="badge" style="background:${e.backgroundColor}">${e.extendedProps.status}</span></p>
+        <a href="/activities/${e.id}" class="btn btn-sm btn-outline-info">🔍 Открыть задачу</a>
+      </div>`;
+
+    const modal = document.createElement("div");
+    modal.classList.add("modal", "fade");
+    modal.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-light border border-info">
+          <div class="modal-header border-info">
+            <h5 class="modal-title">Информация</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">${html}</div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+    modal.addEventListener("hidden.bs.modal", () => modal.remove());
+  }
+
+  // === Стилизация событий ===
+  function styleEvent(info) {
+    info.el.style.filter = "drop-shadow(0 0 6px " + info.event.backgroundColor + ")";
+    info.el.style.borderRadius = "6px";
+    info.el.style.fontWeight = "500";
+    info.el.style.letterSpacing = "0.3px";
+  }
+});
+</script>
+{% endblock %}

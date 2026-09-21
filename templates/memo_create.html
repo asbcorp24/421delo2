@@ -1,0 +1,98 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3 class="mb-3">Создание служебной записки</h3>
+
+<form method="post" action="{{ url_for('add_memo') }}" class="card p-3 shadow-sm">
+  {% if templates %}
+  <div class="mb-3">
+    <label for="memo_template" class="form-label">Шаблон служебной записки</label>
+    <select id="memo_template" class="form-select">
+      <option value="">-- создать без шаблона --</option>
+      {% for template in templates %}
+      <option value="{{ template.id }}" {% if selected_template and selected_template.id == template.id %}selected{% endif %}>{{ template.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="form-text">Шаблон заполнит реквизиты и текст. Перед созданием их можно изменить.</div>
+  </div>
+  {% endif %}
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label">Номер служебной</label>
+      <input type="text" id="reg_number" name="reg_number" class="form-control" value="{{ initial_reg_number }}" {% if not can_manage_reg_numbers %}readonly{% endif %}>
+      <div class="form-text">
+        {% if can_manage_reg_numbers %}
+        Администратор может изменить номер вручную.
+        {% else %}
+        Номер формируется автоматически по настройкам администратора.
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Дата</label>
+      <input type="date" name="memo_date" class="form-control" value="{{ now().strftime('%Y-%m-%d') }}">
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Отдел</label>
+      <select id="department_id" name="department_id" class="form-select" required>
+        <option value="">-- выберите отдел --</option>
+        {% for dep in departments %}
+        <option value="{{ dep.id }}" {% if selected_template and selected_template.department_id == dep.id %}selected{% endif %}>{{ dep.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-8">
+      <label class="form-label">Краткое содержание</label>
+      <input type="text" name="subject" class="form-control" value="{{ selected_template.subject if selected_template else '' }}" required>
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Исполнитель</label>
+      <select name="executor_id" class="form-select">
+        <option value="">-- выберите исполнителя --</option>
+        {% for user in users %}
+        <option value="{{ user.id }}" {% if selected_template and selected_template.executor_id == user.id %}selected{% endif %}>{{ user.full_name }}{% if user.department %} ({{ user.department.name }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-12">
+      <label class="form-label">Текст служебной записки</label>
+      <textarea name="body" class="form-control" rows="5">{{ selected_template.body if selected_template else '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="mt-3 text-end">
+    <a href="{{ url_for('memos_page') }}" class="btn btn-secondary">Отмена</a>
+    <button type="submit" class="btn btn-primary">Создать</button>
+  </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const department = document.getElementById("department_id");
+  const numberInput = document.getElementById("reg_number");
+  const templateSelect = document.getElementById("memo_template");
+  if (templateSelect) {
+    templateSelect.addEventListener("change", function () {
+      const url = new URL(window.location.href);
+      if (templateSelect.value) url.searchParams.set("template_id", templateSelect.value);
+      else url.searchParams.delete("template_id");
+      window.location.assign(url.toString());
+    });
+  }
+  if (!department || !numberInput) return;
+
+  department.addEventListener("change", async function () {
+    if (!department.value) return;
+    const params = new URLSearchParams({ document_type: "memo", department_id: department.value });
+    const response = await fetch(`/api/registration-number?${params}`);
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data.number) numberInput.value = data.number;
+  });
+});
+</script>
+{% endblock %}

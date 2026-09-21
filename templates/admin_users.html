@@ -1,6 +1,52 @@
 {% extends 'layout.html' %}
 {% block content %}
 <h3>Пользователи</h3>
+{% if current_user.role in ['admin', 'superadmin'] %}
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <h5 class="mb-3">Добавить пользователя</h5>
+    <form method="post" action="{{ url_for('admin_add_user') }}" class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">ФИО</label>
+        <input type="text" name="full_name" class="form-control" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Логин</label>
+        <input type="text" name="username" class="form-control" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Пароль</label>
+        <input type="text" name="password" class="form-control" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Отдел</label>
+        <select name="department_id" class="form-select">
+          <option value="">-- не указан --</option>
+          {% for d in deps %}
+          <option value="{{ d.id }}">{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if current_user.role in ['admin', 'superadmin'] %}
+      <div class="col-md-2">
+        <label class="form-label">Роль</label>
+        <select name="role" class="form-select">
+          <option value="worker">Сотрудник</option>
+          <option value="deputy">Заместитель</option>
+          <option value="manager">Руководитель</option>
+          {% if current_user.role == 'superadmin' %}
+          <option value="admin">Администратор</option>
+          {% endif %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="col-12">
+        <button class="btn btn-success">Добавить пользователя</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 <table class="table table-striped">
   <thead>
     <tr>
@@ -14,7 +60,7 @@
       <td>{{ u.full_name }}</td>
       <td>{{ u.username }}</td>
       <td>{{ u.department.name if u.department else '' }}</td>
-      <td>{{ u.role }}</td>
+      <td>{{ {'worker': 'Сотрудник', 'deputy': 'Заместитель', 'manager': 'Руководитель', 'admin': 'Администратор'}.get(u.role, u.role) }}</td>
       <td>
         {% if u.is_approved %}
           <span class="badge bg-success">Да</span>
@@ -22,20 +68,83 @@
           <span class="badge bg-warning">Нет</span>
         {% endif %}
       </td>
-      <td>
-        {% if not u.is_approved %}
-          <form method="post" action="{{ url_for('approve_user', user_id=u.id) }}" class="d-inline">
-            <button class="btn btn-sm btn-success">Подтвердить</button>
-          </form>
+     <td>
+  {% if not u.is_approved %}
+    <form method="post" action="{{ url_for('approve_user', user_id=u.id) }}" class="d-inline">
+      <button class="btn btn-sm btn-success">Подтвердить</button>
+    </form>
+  {% endif %}
+
+  {% if current_user.role == 'superadmin' or u.role != 'admin' %}
+    <form method="post" action="{{ url_for('update_user_role', user_id=u.id) }}" class="d-inline-flex gap-1 mb-1">
+      <select name="role" class="form-select form-select-sm" aria-label="Роль пользователя">
+        <option value="worker" {% if u.role == 'worker' %}selected{% endif %}>Сотрудник</option>
+        <option value="deputy" {% if u.role == 'deputy' %}selected{% endif %}>Заместитель</option>
+        <option value="manager" {% if u.role == 'manager' %}selected{% endif %}>Руководитель</option>
+        {% if current_user.role == 'superadmin' %}
+        <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Администратор</option>
         {% endif %}
-        {% if u.role != 'admin' %}
-          <form method="post" action="{{ url_for('delete_user', user_id=u.id) }}" class="d-inline">
-            <button class="btn btn-sm btn-danger">Удалить</button>
-          </form>
-        {% endif %}
-      </td>
+      </select>
+      <button class="btn btn-sm btn-outline-info">Роль</button>
+    </form>
+    {% if current_user.role == 'superadmin' %}
+    <form method="post" action="{{ url_for('toggle_admin', user_id=u.id) }}" class="d-inline">
+      <button class="btn btn-sm {% if u.role == 'admin' %}btn-warning{% else %}btn-info{% endif %}">
+        {% if u.role == 'admin' %}Снять админа{% else %}Сделать админом{% endif %}
+      </button>
+    </form>
+    {% endif %}
+  {% endif %}
+
+  {% if current_user.role in ['admin', 'superadmin'] %}
+    {% if current_user.role == 'superadmin' or u.role not in ['admin', 'superadmin'] %}
+    <a class="btn btn-sm btn-primary" href="{{ url_for('edit_user', user_id=u.id) }}">Изменить</a>
+    {% endif %}
+    <button class="btn btn-sm btn-secondary" onclick="showPassword({{ u.id }}, '{{ u.full_name|e }}')">
+      🔑 Пароль
+    </button>
+  {% endif %}
+
+  {% if u.role != 'admin' %}
+    <form method="post" action="{{ url_for('delete_user', user_id=u.id) }}" class="d-inline">
+      <button class="btn btn-sm btn-danger">Удалить</button>
+    </form>
+  {% endif %}
+</td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+<!-- Модальное окно -->
+<div class="modal fade" id="passwordModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Пароль пользователя</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p><strong id="userName"></strong></p>
+        <pre id="userPassword" class="bg-dark text-info p-2 rounded"></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-info" data-bs-dismiss="modal">Закрыть</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showPassword(userId, userName) {
+  fetch(`/admin/users/${userId}/password`)
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('userName').textContent = userName;
+      document.getElementById('userPassword').textContent = data.password || '(не задан)';
+      new bootstrap.Modal(document.getElementById('passwordModal')).show();
+    })
+    .catch(err => alert('Ошибка: ' + err));
+}
+</script>
+
 {% endblock %}

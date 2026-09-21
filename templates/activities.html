@@ -1,50 +1,203 @@
 {% extends 'layout.html' %}
 {% block content %}
+<style>
+@media print {
+  html, body { background: #fff !important; color: #000 !important; font-family: "Times New Roman", serif !important; font-size: 11pt; }
+  nav, footer, .toast-container, #userNotificationToastContainer { display: none !important; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  .container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+  .table, .table td, .table th {
+    color: #000 !important;
+    border-color: #999 !important;
+  }
+  @page { size: A4 landscape; margin: 15mm 12mm 18mm; }
+  .table { width: 100% !important; font-size: 8pt; border-collapse: collapse !important; }
+  .table td, .table th { border: 1px solid #000 !important; padding: 4px !important; }
+  .table thead, .table-striped > tbody > tr:nth-of-type(odd) > * { background: #fff !important; color: #000 !important; }
+  .official-footer { display: block !important; }
+}
+.print-only { display: none; }
+.official-footer { display: none; }
+.journal-360 { font-size: .82rem; border: 1px solid rgba(13, 202, 240, .28); border-radius: .7rem; overflow: hidden; }
+.journal-360 th { font-size: .71rem; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; padding: .52rem .45rem; }
+.journal-360 td { padding: .48rem .45rem; vertical-align: middle; }
+.journal-360 td:nth-child(3) { min-width: 180px; font-weight: 600; }
+.journal-360 .badge { font-size: .68rem; }
+.journal-360 .creator-col, .journal-360 .creator-cell { max-width: 120px; font-size: .68rem; line-height: 1.15; color: #aebdca; }
+@media (max-width: 900px) {
+  .journal-360 th:nth-child(2), .journal-360 td:nth-child(2), .journal-360 th:nth-child(5), .journal-360 td:nth-child(5), .journal-360 th:nth-child(8), .journal-360 td:nth-child(8) { display: none; }
+}
+</style>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3>Список активностей</h3>
-  <a href="{{ url_for('create_activity') }}" class="btn btn-primary">➕ Новая активность</a>
+<div class="print-only mb-4">
+  <div class="d-flex justify-content-between" style="color:#000; font-size:10pt;"><div>Организация: ______________________________</div><div>УТВЕРЖДАЮ<br>________________ /____________/</div></div>
+  <h2 class="mb-2 text-center" style="color:#000; text-shadow:none;">ЖУРНАЛ УЧЕТА ЗАДАЧ</h2>
+  <div style="color:#000;">
+    <div>Дата печати: {{ now().strftime('%d.%m.%Y %H:%M') }}</div>
+    <div>
+      Период:
+      {{ date_from if date_from else 'не задан' }} - {{ date_to if date_to else 'не задан' }}
+      {% if search %}| Поиск: {{ search }}{% endif %}
+      {% if my_only %}| Режим: свои задачи
+      {% elif owner_id and filter_users %}| Пользователь: {{ filter_users | selectattr('id', 'equalto', owner_id|int) | map(attribute='full_name') | list | first }}
+      {% else %}| Режим: все задачи
+      {% endif %}
+    </div>
+  </div>
 </div>
-<table class="table table-striped align-middle shadow-sm">
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3 no-print">
+  <h3 class="mb-0">Список задач</h3>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Печать</button>
+    <a href="{{ url_for('export_journal', kind='activities', format_name='csv', date_from=date_from, date_to=date_to) }}" class="btn btn-outline-success">CSV</a>
+    <a href="{{ url_for('create_activity') }}" class="btn btn-primary">Новая задача</a>
+  </div>
+</div>
+
+<form method="get" class="row g-2 align-items-end mb-3 no-print">
+  <div class="col-auto">
+    <label for="date_from" class="form-label">С</label>
+    <input type="date" id="date_from" name="date_from" class="form-control" value="{{ date_from }}">
+  </div>
+
+  <div class="col-auto">
+    <label for="date_to" class="form-label">По</label>
+    <input type="date" id="date_to" name="date_to" class="form-control" value="{{ date_to }}">
+  </div>
+
+  <div class="col-auto">
+    <label for="search" class="form-label">Поиск</label>
+    <input type="text" id="search" name="search" class="form-control" value="{{ search or '' }}" placeholder="Название, тема, документ">
+  </div>
+
+  <div class="col-auto">
+    <label for="status" class="form-label">Статус</label>
+    <select id="status" name="status" class="form-select">
+      {% for code, label in status_filters %}
+      <option value="{{ code }}" {% if selected_status == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-auto">
+    <label for="sort" class="form-label">Сортировка</label>
+    <select id="sort" name="sort" class="form-select">
+      <option value="date_desc" {% if sort == 'date_desc' %}selected{% endif %}>Сначала новые</option>
+      <option value="date_asc" {% if sort == 'date_asc' %}selected{% endif %}>Сначала старые</option>
+      <option value="priority_desc" {% if sort == 'priority_desc' %}selected{% endif %}>Приоритет: высокий сверху</option>
+      <option value="priority_asc" {% if sort == 'priority_asc' %}selected{% endif %}>Приоритет: низкий сверху</option>
+    </select>
+  </div>
+
+  {% if filter_users %}
+  <div class="col-auto">
+    <label for="owner_id" class="form-label">На пользователя</label>
+    <select id="owner_id" name="owner_id" class="form-select" {% if my_only %}disabled{% endif %}>
+      <option value="">Все</option>
+      {% for user in filter_users %}
+      <option value="{{ user.id }}" {% if owner_id == user.id|string %}selected{% endif %}>
+        {{ user.full_name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-auto">
+    <div class="form-check mt-4 pt-2">
+      <input class="form-check-input" type="checkbox" value="1" id="my_only" name="my_only" {% if my_only %}checked{% endif %}>
+      <label class="form-check-label" for="my_only">Свои задачи</label>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="col-auto">
+    <button type="submit" class="btn btn-primary">Фильтровать</button>
+    <a href="{{ url_for('activities_page') }}" class="btn btn-secondary">Сбросить</a>
+  </div>
+</form>
+
+<div class="table-responsive journal-360 shadow-sm">
+<table class="table table-striped align-middle mb-0">
   <thead class="table-dark">
     <tr>
-      <th>ID</th>
+      <th>№</th>
+      <th>Тема</th>
       <th>Название</th>
+      <th>Приоритет</th>
       <th>Тип</th>
-      <th>Создал</th>
+      <th>Исходный документ</th>
+      <th>Ответственный</th>
+      <th class="creator-col">Создал</th>
       <th>Статус</th>
       <th>Начало</th>
       <th>Окончание</th>
-      <th></th>
+      <th class="no-print"></th>
     </tr>
   </thead>
   <tbody>
     {% for a in activities %}
-    <tr>
-      <td>{{ a.id }}</td>
-      <td>{{ a.title }}</td>
-      <td>{{ a.type.name if a.type else '-' }}</td>
-      <td>{{ a.owner.full_name if a.owner else '-' }}</td>
-      <td>
-        {% if a.status == 'open' %}
-          <span class="badge bg-success">Открыта</span>
-        {% elif a.status == 'closed' %}
-          <span class="badge bg-secondary">Закрыта</span>
-        {% else %}
-          <span class="badge bg-warning text-dark">{{ a.status }}</span>
-        {% endif %}
-      </td>
-      <td>{{ a.start_date.strftime('%d.%m.%Y') if a.start_date else '' }}</td>
-      <td>{{ a.end_date.strftime('%d.%m.%Y') if a.end_date else '' }}</td>
-      <td class="text-nowrap">
-  <a href="{{ url_for('activity_view', activity_id=a.id) }}"
-     class="btn btn-sm btn-outline-primary me-1">Открыть</a>
- <a href="{{ url_for('new_letter_from_activity', activity_id=a.id) }}"
-     class="btn btn-sm btn-outline-success">✉️ Письмо</a>
-</td>
-    </tr>
+      {% set meta = get_status_meta(a.status) %}
+      <tr>
+        <td>{{ a.id }}</td>
+        <td>{{ a.direction or '-' }}</td>
+        <td>{{ a.title }}</td>
+        {% set priority_meta = get_priority_meta(a.priority) %}
+        <td><span class="badge {{ priority_meta.class }}">{{ priority_meta.label }}</span></td>
+        <td>{{ a.type.name if a.type else '-' }}</td>
+        <td>{{ a.outgoing_document or '-' }}</td>
+        <td>{% if a.owner_id == -1 %}Суперадминистратор{% else %}{{ a.owner.full_name if a.owner else '-' }}{% endif %}</td>
+        <td class="creator-cell">{{ a.created_by.full_name if a.created_by else '-' }}</td>
+        <td>
+          <span class="badge {{ meta.class }}" {% if meta.style %}style="{{ meta.style }}"{% endif %}>{{ meta.label }}</span>
+        </td>
+        <td>{{ a.start_date.strftime('%d.%m.%Y') if a.start_date else '' }}</td>
+        <td>{{ a.end_date.strftime('%d.%m.%Y') if a.end_date else '' }}</td>
+        <td class="text-nowrap no-print">
+          <a href="{{ url_for('activity_view', activity_id=a.id) }}" class="btn btn-sm btn-outline-primary">Открыть</a>
+        </td>
+      </tr>
+    {% else %}
+      <tr>
+        <td colspan="12" class="text-center text-muted">Задач пока нет</td>
+      </tr>
     {% endfor %}
   </tbody>
 </table>
+</div>
+{% set pagination_params = {'date_from': date_from, 'date_to': date_to, 'status': selected_status, 'sort': sort} %}
+{% if search %}{% set _ = pagination_params.update({'search': search}) %}{% endif %}
+{% if owner_id %}{% set _ = pagination_params.update({'owner_id': owner_id}) %}{% endif %}
+{% if my_only %}{% set _ = pagination_params.update({'my_only': '1'}) %}{% endif %}
+{% set pagination_endpoint = 'activities_page' %}
+{% include 'partials/_pagination.html' %}
+<div class="official-footer mt-4" style="color:#000;">Ответственный за ведение журнала: __________________ /____________/ &nbsp;&nbsp;&nbsp; Дата: {{ now().strftime('%d.%m.%Y') }}</div>
+
+{% if filter_users %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const myOnly = document.getElementById('my_only');
+  const owner = document.getElementById('owner_id');
+  if (!myOnly || !owner) return;
+
+  const syncOwnerState = () => {
+    owner.disabled = myOnly.checked;
+    if (myOnly.checked) owner.value = '';
+  };
+
+  myOnly.addEventListener('change', syncOwnerState);
+  syncOwnerState();
+});
+</script>
+{% endif %}
 
 {% endblock %}

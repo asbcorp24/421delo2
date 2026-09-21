@@ -1,0 +1,130 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3>Справочник предприятий</h3>
+
+<form method="post" action="{{ url_for('add_letter_source') }}" class="card p-3 mb-4 shadow-sm">
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Название нового предприятия</label>
+      <input type="text" name="name" class="form-control" placeholder="Например: ТОО Ромашка" required>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">БИН / ИНН</label>
+      <input type="text" name="bin_code" class="form-control" placeholder="123456789012">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Телефон</label>
+      <input type="text" name="phone" class="form-control" placeholder="+7 700 000 00 00">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Email</label>
+      <input type="text" name="email" class="form-control" placeholder="mail@company.kz">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Контактное лицо</label>
+      <input type="text" name="contact_person" class="form-control" placeholder="ФИО контактного лица">
+    </div>
+    <div class="col-12">
+      <label class="form-label">Адрес</label>
+      <input type="text" name="address" class="form-control" placeholder="Полный адрес предприятия">
+    </div>
+    <div class="col-12">
+      <label class="form-label">Примечание</label>
+      <textarea name="notes" class="form-control" rows="3" placeholder="Дополнительная информация"></textarea>
+    </div>
+    <div class="col-md-4">
+      <button class="btn btn-success w-100">Добавить</button>
+    </div>
+  </div>
+</form>
+
+<table class="table table-striped align-middle">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Название</th>
+      <th>БИН / ИНН</th>
+      <th>Контакты</th>
+      <th>Адрес</th>
+      <th>Действия</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for source in sources %}
+    <tr>
+      <td>{{ source.id }}</td>
+      <td>{{ source.name }}</td>
+      <td>{{ source.bin_code or '-' }}</td>
+      <td>
+        <div>{{ source.phone or '-' }}</div>
+        {% if source.email %}<div class="small text-muted">{{ source.email }}</div>{% endif %}
+        {% if source.contact_person %}<div class="small text-muted">{{ source.contact_person }}</div>{% endif %}
+      </td>
+      <td>
+        <div>{{ source.address or '-' }}</div>
+        {% if source.notes %}<div class="small text-muted">{{ source.notes }}</div>{% endif %}
+      </td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editSourceModal{{ source.id }}">
+          Редактировать
+        </button>
+        <form method="post" action="{{ url_for('delete_letter_source', source_id=source.id) }}" class="d-inline">
+          <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить предприятие?')">Удалить</button>
+        </form>
+      </td>
+    </tr>
+
+    <div class="modal fade" id="editSourceModal{{ source.id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form method="post" action="{{ url_for('edit_letter_source', source_id=source.id) }}">
+            <div class="modal-header">
+              <h5 class="modal-title">Редактировать предприятие</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">Название</label>
+                <input type="text" name="name" class="form-control" value="{{ source.name }}" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">БИН / ИНН</label>
+                <input type="text" name="bin_code" class="form-control" value="{{ source.bin_code or '' }}">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Телефон</label>
+                <input type="text" name="phone" class="form-control" value="{{ source.phone or '' }}">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Email</label>
+                <input type="text" name="email" class="form-control" value="{{ source.email or '' }}">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Контактное лицо</label>
+                <input type="text" name="contact_person" class="form-control" value="{{ source.contact_person or '' }}">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Адрес</label>
+                <input type="text" name="address" class="form-control" value="{{ source.address or '' }}">
+              </div>
+              <div class="mb-0">
+                <label class="form-label">Примечание</label>
+                <textarea name="notes" class="form-control" rows="3">{{ source.notes or '' }}</textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+              <button class="btn btn-primary">Сохранить</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <tr>
+      <td colspan="6" class="text-center text-muted">Предприятия пока не добавлены</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

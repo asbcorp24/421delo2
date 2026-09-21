@@ -5,9 +5,181 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="3620fcb2-c813-485b-867d-b0a72e010323" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.env" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/app.spec" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backup_database.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backups/otd421_db_2026-09-15_16-01-40.zip" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/build/app/Analysis-00.toc" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/build/app/EXE-00.toc" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/build/app/PKG-00.toc" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/build/app/PYZ-00.pyz" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/build/app/PYZ-00.toc" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/build/app/app.pkg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/build/app/base_library.zip" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/build/app/warn-app.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/build/app/xref-app.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/CMakeLists.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/ALL_BUILD.vcxproj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/ALL_BUILD.vcxproj.filters" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeCache.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CMakeCXXCompiler.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CMakeDetermineCompilerABI_CXX.bin" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CMakeRCCompiler.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CMakeSystem.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/CMakeCXXCompilerId.cpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/CompilerIdCXX.exe" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/CompilerIdCXX.vcxproj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CMakeCXXCompilerId.obj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CompilerIdCXX.exe.recipe" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CompilerIdCXX.tlog/CL.command.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CompilerIdCXX.tlog/CL.read.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CompilerIdCXX.tlog/CL.write.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CompilerIdCXX.tlog/Cl.items.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CompilerIdCXX.tlog/CompilerIdCXX.lastbuildstate" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CompilerIdCXX.tlog/link.command.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CompilerIdCXX.tlog/link.read.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CompilerIdCXX.tlog/link.secondary.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/CompilerIdCXX/Debug/CompilerIdCXX.tlog/link.write.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/VCTargetsPath.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/VCTargetsPath.vcxproj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/VCTargetsPath/x64/Debug/VCTargetsPath.recipe" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/4.3.2/VCTargetsPath/x64/Debug/VCTargetsPath.tlog/VCTargetsPath.lastbuildstate" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/CMakeConfigureLog.yaml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/InstallScripts.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/TargetDirectories.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/cmake.check_cache" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/e7f11e4cf72d12cc9b6a0cb15a5fd051/generate.stamp.rule" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/generate.stamp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/generate.stamp.depend" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/CMakeFiles/generate.stamp.list" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/Release/config.ini" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/Release/otd421_chat_tray.exe" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/ZERO_CHECK.vcxproj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/ZERO_CHECK.vcxproj.filters" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/cmake_install.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/main.obj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.exe.recipe" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/CL.command.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/CL.read.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/CL.write.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/Cl.items.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/CustomBuild.command.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/CustomBuild.read.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/CustomBuild.write.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/link.command.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/link.read.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/link.secondary.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/link.write.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.dir/Release/otd421_chat_tray.tlog/otd421_chat_tray.lastbuildstate" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.sln" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.vcxproj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/otd421_chat_tray.vcxproj.filters" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/x64/Release/ALL_BUILD/ALL_BUILD.recipe" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/x64/Release/ALL_BUILD/ALL_BUILD.tlog/ALL_BUILD.lastbuildstate" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/x64/Release/ALL_BUILD/ALL_BUILD.tlog/CustomBuild.command.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/x64/Release/ALL_BUILD/ALL_BUILD.tlog/CustomBuild.read.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/x64/Release/ALL_BUILD/ALL_BUILD.tlog/CustomBuild.write.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/x64/Release/ZERO_CHECK/ZERO_CHECK.recipe" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/x64/Release/ZERO_CHECK/ZERO_CHECK.tlog/CustomBuild.command.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/x64/Release/ZERO_CHECK/ZERO_CHECK.tlog/CustomBuild.read.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/x64/Release/ZERO_CHECK/ZERO_CHECK.tlog/CustomBuild.write.1.tlog" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/build/x64/Release/ZERO_CHECK/ZERO_CHECK.tlog/ZERO_CHECK.lastbuildstate" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/config.ini.example" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/main.cpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/otd421_chat_tray_portable.zip" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/portable/README.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/portable/chat_client.db" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/portable/chat_history.log" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/portable/config.ini" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/portable/otd421_chat_tray.exe" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cpp/chat_tray/portable/start_chat_tray.bat" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/app.db" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/app.exe" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/activities.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/activity_create.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/activity_create_from_letter.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/activity_view.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/admin_activity_types.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/admin_departments.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/admin_users.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/admin_values.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/dashboard.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/document_access_manager.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/error.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/layout.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/letter_create.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/letter_view.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/letters.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/login.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/my_plans.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/otchet.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/partials/_log_item.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/plan_activities.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/plan_create.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/plan_executors.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/plans.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/plans_calendar.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/plans_statistics.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/register.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/search_results.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/dist/templates/value_templates.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/bootstrap-icons.css" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/bootstrap.bundle.min.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/bootstrap.min.css" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/fonts/bootstrap-icons.woff" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/fonts/bootstrap-icons.woff2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/jquery-3.6.0.min.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/manifest.webmanifest" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/pwa-icon-192.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/pwa-icon-512.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/pwa-icon.svg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/sw.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/admin_download_logs.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/admin_show_password.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/admin_values.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/board.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/chat.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/document_access_manager.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/document_request_access.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/file_access.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/file_upload.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/files_list.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/help.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/letter_request_access.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/memos_analytics.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/memos_archive.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/my_plans.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/notification_send.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/notifications.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/plan_activities.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/plan_create.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/plan_detail.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/plan_executors.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/plans.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/plans_calendar.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/plans_statistics.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/profile.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/report_external_links.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/search_results.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/value_templates.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.db" beforeDir="false" afterPath="$PROJECT_DIR$/app.db" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/activities.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/activities.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/activity_create.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/activity_create.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/activity_create_from_letter.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/activity_create_from_letter.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/activity_view.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/activity_view.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/admin_users.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/admin_users.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/dashboard.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/dashboard.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/layout.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/layout.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/letter_create.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/letter_create.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/letter_view.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/letter_view.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/letters.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/letters.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/login.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/login.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/partials/_log_item.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/partials/_log_item.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -37,20 +209,27 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "DefaultHtmlFileTemplate": "HTML File",
-    "Python.app.executor": "Run",
-    "Python.init_db.executor": "Run",
-    "Python.main.executor": "Run",
-    "Python.models.executor": "Run",
-    "RunOnceActivity.OpenProjectViewOnStart": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "main"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ASKED_ADD_EXTERNAL_FILES&quot;: &quot;true&quot;,
+    &quot;DefaultHtmlFileTemplate&quot;: &quot;HTML File&quot;,
+    &quot;Python.app.executor&quot;: &quot;Run&quot;,
+    &quot;Python.init_db.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.models.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/project/otd421/app.py&quot;
   }
-}]]></component>
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\project\otd421\static" />
+    </key>
+  </component>
   <component name="RunManager">
-    <configuration name="main" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+    <configuration name="app" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="otd421" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -63,7 +242,7 @@
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/main.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/app.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -91,6 +270,20 @@
     </task>
     <servers />
   </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />
+  </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
@@ -98,6 +291,11 @@
           <url>file://$PROJECT_DIR$/main.py</url>
           <line>8</line>
           <option name="timeStamp" value="1" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/app.py</url>
+          <line>261</line>
+          <option name="timeStamp" value="4" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

@@ -1,0 +1,123 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container mt-4">
+  <h3>📋 План №{{ plan.id }}</h3>
+  <p><b>Период:</b> {{ plan.start_date }} — {{ plan.end_date }}</p>
+  <p><b>Описание:</b> {{ plan.plan_text }}</p>
+
+  <hr>
+
+  <button class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#addExecutorModal">
+    ➕ Добавить исполнителя
+  </button>
+
+  <table class="table table-striped table-bordered align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>ID</th>
+        <th>Исполнитель</th>
+        <th>Тема</th>
+        <th>Период</th>
+        <th>Статус</th>
+      </tr>
+    </thead>
+    <tbody id="executorsTable">
+      {% for ex in plan.executors %}
+      <tr>
+        <td>{{ ex.id }}</td>
+        <td>{{ ex.user.full_name }}</td>
+        <td>{{ ex.topic }}</td>
+        <td>{{ ex.start_date }} — {{ ex.end_date }}</td>
+        <td>{{ ex.status }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="text-center text-muted">Пока нет исполнителей</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ===================== МОДАЛЬНОЕ ОКНО ===================== -->
+<div class="modal fade" id="addExecutorModal" tabindex="-1" aria-labelledby="addExecutorLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="addExecutorLabel">Добавить исполнителя</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="executorForm">
+          <div class="mb-3">
+            <label class="form-label">Исполнитель</label>
+            <select class="form-select" name="user_id" required>
+              <option value="">— выберите —</option>
+              {% for u in users %}
+              <option value="{{ u.id }}">{{ u.full_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Тема задания</label>
+            <input type="text" class="form-control" name="topic" placeholder="Например: подготовить отчёт по направлению..." required>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label class="form-label">Дата начала</label>
+              <input type="date" class="form-control" name="start_date" required>
+            </div>
+            <div class="col">
+              <label class="form-label">Дата окончания</label>
+              <input type="date" class="form-control" name="end_date" required>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-success" id="saveExecutorBtn">💾 Добавить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== JS AJAX ===================== -->
+<script>
+document.getElementById("saveExecutorBtn").addEventListener("click", function() {
+  const form = document.getElementById("executorForm");
+  const data = Object.fromEntries(new FormData(form).entries());
+
+  if (!data.user_id || !data.topic) {
+    alert("Заполните все поля!");
+    return;
+  }
+
+  fetch("{{ url_for('plan_executors_add_ajax', plan_id=plan.id) }}", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  })
+  .then(r => r.json())
+  .then(resp => {
+    if (resp.success) {
+      // добавляем новую строку в таблицу без перезагрузки
+      const row = `<tr>
+        <td>${resp.executor.id}</td>
+        <td>${resp.executor.user_name}</td>
+        <td>${resp.executor.topic}</td>
+        <td>${resp.executor.start_date} — ${resp.executor.end_date}</td>
+        <td>${resp.executor.status}</td>
+      </tr>`;
+      document.getElementById("executorsTable").insertAdjacentHTML("beforeend", row);
+      form.reset();
+      bootstrap.Modal.getInstance(document.getElementById("addExecutorModal")).hide();
+    } else {
+      alert(resp.error || "Ошибка при добавлении исполнителя");
+    }
+  })
+  .catch(err => alert("Ошибка сети: " + err));
+});
+</script>
+{% endblock %}

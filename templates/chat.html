@@ -1,0 +1,145 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h3>💬 Чат</h3>
+
+  <div class="row">
+    <!-- Список пользователей -->
+    <div class="col-md-3">
+  <input type="text" id="userSearch" class="form-control mb-2" placeholder="🔍 Поиск собеседника">
+  <div id="userList" class="list-group" style="max-height:500px; overflow-y:auto;">
+    <a href="#" class="list-group-item list-group-item-action active" data-user="all">🌍 Общий чат</a>
+  </div>
+</div>
+
+
+    <!-- Чат -->
+    <div class="col-md-9">
+      <div id="chatBox" style="height:400px; overflow-y:auto; border:1px solid #0ff; padding:10px; background:rgba(0,255,255,0.03); border-radius:10px;"></div>
+
+      <form id="chatForm" enctype="multipart/form-data" class="mt-3 d-flex gap-2">
+        <input type="hidden" name="receiver_id" id="receiverId" value="all">
+        <input type="text" name="text" id="chatText" class="form-control" placeholder="Введите сообщение..." required>
+        <input type="file" name="file" id="chatFile" class="form-control" style="max-width:230px;">
+        <button class="btn btn-primary"><i class="bi bi-send"></i></button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentUser = "all";
+const urlParams = new URLSearchParams(window.location.search);
+const initialUserFromUrl = urlParams.get("user_id") || "all";
+let renderedMessageIds = new Set();
+
+function renderMessage(message) {
+  return `
+    <div class="mb-2" data-message-id="${message.id}">
+      <b>${message.sender}</b> <small>${message.time}</small><br>
+      ${message.text || ""}
+      ${message.file ? `<br><a href="${message.file}" target="_blank">📎 Файл</a>` : ""}
+    </div>`;
+}
+
+async function loadMessages() {
+  const res = await fetch(`/api/chat/messages?user_id=${currentUser}`);
+  const data = await res.json();
+  const box = document.getElementById("chatBox");
+  renderedMessageIds = new Set();
+  box.innerHTML = "";
+  for (const m of data) {
+    box.insertAdjacentHTML("beforeend", renderMessage(m));
+    renderedMessageIds.add(m.id);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+document.getElementById("chatForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData(form);
+  const response = await fetch("/api/chat/send", { method: "POST", body: fd });
+  if (!response.ok) {
+    alert("Не удалось отправить сообщение.");
+    return;
+  }
+  document.getElementById("chatText").value = "";
+  document.getElementById("chatFile").value = "";
+  await loadMessages();
+});
+
+document.querySelectorAll("#userList a").forEach(el => {
+  el.addEventListener("click", e => {
+    e.preventDefault();
+    document.querySelectorAll("#userList a").forEach(a => a.classList.remove("active"));
+    el.classList.add("active");
+    currentUser = el.dataset.user;
+    document.getElementById("receiverId").value = currentUser;
+    loadMessages();
+  });
+});
+async function loadUsers() {
+  const res = await fetch("/api/chat/users");
+  const data = await res.json();
+  const list = document.getElementById("userList");
+
+  // очищаем, добавляем общий чат
+  list.innerHTML = `<a href="#" class="list-group-item list-group-item-action active" data-user="all">🌍 Общий чат</a>`;
+
+  const generalItem = list.querySelector('[data-user="all"]');
+  generalItem.addEventListener("click", e => {
+    e.preventDefault();
+    document.querySelectorAll("#userList a").forEach(a => a.classList.remove("active"));
+    generalItem.classList.add("active");
+    currentUser = "all";
+    document.getElementById("receiverId").value = currentUser;
+    loadMessages();
+  });
+
+  for (const u of data) {
+    const item = document.createElement("a");
+    item.href = "#";
+    item.classList.add("list-group-item", "list-group-item-action");
+    item.dataset.user = u.id;
+    item.innerHTML = `<i class="bi bi-person"></i> ${u.name} <small class="text-muted">(${u.role})</small>`;
+    item.addEventListener("click", e => {
+      e.preventDefault();
+      document.querySelectorAll("#userList a").forEach(a => a.classList.remove("active"));
+      item.classList.add("active");
+      currentUser = item.dataset.user;
+      document.getElementById("receiverId").value = currentUser;
+      loadMessages();
+    });
+    list.appendChild(item);
+  }
+
+  const targetUser = initialUserFromUrl;
+  const targetItem = Array.from(document.querySelectorAll("#userList a")).find(
+    a => a.dataset.user === targetUser
+  ) || generalItem;
+
+  document.querySelectorAll("#userList a").forEach(a => a.classList.remove("active"));
+  targetItem.classList.add("active");
+  currentUser = targetItem.dataset.user;
+  document.getElementById("receiverId").value = currentUser;
+  loadMessages();
+}
+
+// фильтр поиска
+document.getElementById("userSearch").addEventListener("input", (e) => {
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll("#userList a").forEach(a => {
+    if (a.textContent.toLowerCase().includes(q) || a.dataset.user === "all") {
+      a.style.display = "";
+    } else {
+      a.style.display = "none";
+    }
+  });
+});
+
+loadUsers();
+loadMessages();
+setInterval(loadMessages, 5000);
+</script>
+{% endblock %}

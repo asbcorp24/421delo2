@@ -1,0 +1,10 @@
+[Unit]
+Description=Run OTD421 database backup daily at 17:00
+
+[Timer]
+OnCalendar=*-*-* 17:00:00
+Persistent=true
+Unit=otd421-backup.service
+
+[Install]
+WantedBy=timers.target

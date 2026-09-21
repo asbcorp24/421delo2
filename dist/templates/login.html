@@ -1,0 +1,25 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-4">
+    <h3 class="mb-3 text-center">Вход</h3>
+    <form method="post" action="{{ url_for('login_form') }}">
+      <div class="mb-3">
+        <label class="form-label">Логин</label>
+        <input type="text" name="username" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Пароль</label>
+        <input type="password" name="password" class="form-control" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Войти</button>
+    </form>
+
+    <div class="text-center mt-3">
+      <a href="{{ url_for('register_page') }}" class="text-decoration-none">
+        📝 Зарегистрироваться
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,284 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3 class="mb-3">📝 Создание активности</h3>
+
+<form method="post" class="card p-3 shadow-sm" id="activity-form">
+  <div class="mb-3">
+    <label class="form-label">Тип активности</label>
+    <select name="type_id" class="form-select">
+      <option value="">-- не указано --</option>
+      {% for t in types %}
+        <option value="{{ t.id }}">{{ t.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Название</label>
+    <input type="text" name="title" class="form-control" required>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Описание</label>
+    <textarea name="description" class="form-control" rows="3"></textarea>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col">
+      <label class="form-label">Дата начала</label>
+      <input type="date" name="start_date" class="form-control" value="{{ now().strftime('%Y-%m-%d') }}">
+    </div>
+    <div class="col">
+      <label class="form-label">Дата окончания</label>
+      <input type="date" name="end_date" class="form-control">
+    </div>
+  </div>
+
+
+
+  {% if current_user.role == 'admin' %}
+  <div class="mb-3">
+    <label class="form-label">👥 Исполнители</label>
+    <select name="executors" class="form-select" multiple>
+      {% for u in users %}
+        <option value="{{ u.id }}">{{ u.full_name }} ({{ u.department.name if u.department else '' }})</option>
+      {% endfor %}
+    </select>
+    <div class="form-text">Можно выбрать нескольких — у каждого будет своя активность.</div>
+  </div>
+  {% else %}
+  <input type="hidden" name="executors" value="{{ current_user.id }}">
+  <div class="alert alert-info">Активность будет создана для вас ({{ current_user.full_name }}).</div>
+  {% endif %}
+
+  <hr>
+<div class="mb-3">
+  <label class="form-label">Направление</label>
+  <input list="directions" name="direction" class="form-control" placeholder="Введите или выберите направление">
+  <datalist id="directions">
+    {% for d in existing_directions %}
+      <option value="{{ d }}">
+    {% endfor %}
+  </datalist>
+</div>
+
+<div class="mb-3">
+  <label class="form-label">Решение</label>
+  <textarea name="decision" class="form-control" rows="3" placeholder="Введите принятое решение..."></textarea>
+</div>
+
+<hr>
+
+
+
+<!-- скрытое поле для JSON -->
+
+
+  <div class="text-end">
+    <a href="{{ url_for('activities_page') }}" class="btn btn-secondary">Отмена</a>
+    <button type="submit" class="btn btn-success">💾 Создать</button>
+  </div>
+</form>
+<div class="modal fade" id="valuesModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Выбор шаблонов значений</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body">
+        <select id="value-templates" class="form-select" multiple style="height:300px;"></select>
+        <div class="form-text">Выберите один или несколько шаблонов и нажмите "Добавить".</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-success" id="add-values-btn" data-bs-dismiss="modal">Добавить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Загрузим шаблоны и поднимем UI
+document.addEventListener('DOMContentLoaded', async () => {
+  const sel = document.getElementById('value-templates');
+  const container = document.getElementById('values-container');
+  const hidden = document.getElementById('extra_values');
+  let templates = [];
+
+  try {
+    const res = await fetch('/api/value-templates');
+    templates = await res.json(); // [{id,name,rusname,type},...]
+  } catch(e) {
+    console.error('Не удалось получить шаблоны', e);
+  }
+
+  // Заполняем селект
+  for (const t of templates) {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = `${t.rusname} (${t.type})`;
+    sel.appendChild(opt);
+  }
+
+  sel.addEventListener('change', renderFields);
+  document.getElementById('activity-form').addEventListener('submit', collectJSON);
+
+  function renderFields() {
+    container.innerHTML = '';
+    const selectedIds = Array.from(sel.selectedOptions).map(o => Number(o.value));
+    const selected = templates.filter(t => selectedIds.includes(t.id));
+
+    for (const t of selected) {
+      const col = document.createElement('div');
+      col.className = 'col-md-6';
+
+      let controlHtml = '';
+      switch (t.type) {
+        case 'int':
+          controlHtml = `<input type="number" step="1" class="form-control" data-template="${t.id}" placeholder="${t.rusname}">`;
+          break;
+        case 'float':
+          controlHtml = `<input type="number" step="any" class="form-control" data-template="${t.id}" placeholder="${t.rusname}">`;
+          break;
+        case 'bool':
+          controlHtml = `
+            <div class="form-check form-switch">
+              <input type="checkbox" class="form-check-input" data-template="${t.id}">
+              <label class="form-check-label">${t.rusname}</label>
+            </div>`;
+          break;
+        case 'date':
+          controlHtml = `<input type="date" class="form-control" data-template="${t.id}" placeholder="${t.rusname}">`;
+          break;
+        case 'text':
+          controlHtml = `<textarea class="form-control" rows="2" data-template="${t.id}" placeholder="${t.rusname}"></textarea>`;
+          break;
+        case 'string':
+        default:
+          controlHtml = `<input type="text" class="form-control" data-template="${t.id}" placeholder="${t.rusname}">`;
+      }
+
+      col.innerHTML = `
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <label class="form-label">${t.rusname} <small class="text-muted">(${t.name}, ${t.type})</small></label>
+            ${controlHtml}
+          </div>
+        </div>`;
+      container.appendChild(col);
+    }
+  }
+
+  function collectJSON(ev) {
+    // собрать значения из сгенерированных контролов
+    const fields = container.querySelectorAll('[data-template]');
+    const mapById = Object.fromEntries(templates.map(t => [String(t.id), t]));
+
+    const result = Array.from(fields).map(el => {
+      const tid = String(el.getAttribute('data-template'));
+      const tpl = mapById[tid];
+      let value;
+      if (tpl.type === 'bool') {
+        value = el.checked ? true : false;
+      } else {
+        value = el.value ?? null;
+        if (tpl.type === 'int' && value !== '' && value !== null) value = parseInt(value, 10);
+        if (tpl.type === 'float' && value !== '' && value !== null) value = parseFloat(value);
+      }
+      return {
+        id: tpl.id,
+        name: tpl.name,
+        rusname: tpl.rusname,
+        type: tpl.type,
+        value: value
+      };
+    });
+
+    hidden.value = JSON.stringify(result);
+  }
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const sel = document.getElementById('value-templates');
+  const container = document.getElementById('values-container');
+  const hidden = document.getElementById('extra_values');
+  const addBtn = document.getElementById('add-values-btn');
+
+  let templates = [];
+
+  // Загружаем шаблоны с сервера
+  try {
+    const res = await fetch('/api/value-templates');
+    templates = await res.json();
+    templates.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = `${t.rusname} (${t.type})`;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.error("Ошибка загрузки шаблонов:", e);
+  }
+
+  // После выбора шаблонов → рендерим поля
+  addBtn.addEventListener('click', () => {
+    const selected = Array.from(sel.selectedOptions).map(o => parseInt(o.value));
+    selected.forEach(id => {
+      const t = templates.find(x => x.id === id);
+      if (!t) return;
+
+      const div = document.createElement('div');
+      div.className = 'col-md-6';
+
+      let inputHTML = '';
+      switch (t.type) {
+        case 'int': inputHTML = `<input type="number" class="form-control" data-id="${t.id}" placeholder="${t.rusname}">`; break;
+        case 'float': inputHTML = `<input type="number" step="any" class="form-control" data-id="${t.id}" placeholder="${t.rusname}">`; break;
+        case 'bool': inputHTML = `<div class="form-check"><input type="checkbox" class="form-check-input" data-id="${t.id}"><label class="form-check-label">${t.rusname}</label></div>`; break;
+        case 'date': inputHTML = `<input type="date" class="form-control" data-id="${t.id}">`; break;
+        case 'text': inputHTML = `<textarea class="form-control" data-id="${t.id}" rows="2" placeholder="${t.rusname}"></textarea>`; break;
+        default: inputHTML = `<input type="text" class="form-control" data-id="${t.id}" placeholder="${t.rusname}">`;
+      }
+
+      div.innerHTML = `
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <label class="form-label">${t.rusname} <small class="text-muted">(${t.type})</small></label>
+            ${inputHTML}
+          </div>
+        </div>`;
+      container.appendChild(div);
+    });
+
+    // очищаем выбор
+    sel.selectedIndex = -1;
+  });
+
+  // Перед отправкой формы — собираем JSON
+  document.querySelector('form').addEventListener('submit', (e) => {
+    const fields = container.querySelectorAll('[data-id]');
+    const result = [];
+    fields.forEach(el => {
+      const id = el.dataset.id;
+      const tpl = templates.find(t => t.id == id);
+      let value;
+      if (tpl.type === 'bool') value = el.checked;
+      else value = el.value || null;
+
+      result.push({
+        id: tpl.id,
+        name: tpl.name,
+        rusname: tpl.rusname,
+        type: tpl.type,
+        value: value
+      });
+    });
+    hidden.value = JSON.stringify(result);
+  });
+});
+</script>
+
+
+{% endblock %}

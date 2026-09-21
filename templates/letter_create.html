@@ -1,56 +1,168 @@
 {% extends 'layout.html' %}
 {% block content %}
-<h3 class="mb-3">📨 Создание письма</h3>
+<h3 class="mb-3">Создание письма</h3>
 
-<form method="post" action="{{ url_for('add_letter') }}" enctype="multipart/form-data">
-  <div class="mb-3">
-    <label class="form-label">Тема письма</label>
- <input type="text" name="subject" class="form-control"
-       value="{{ subject or '' }}" required>
-  </div>
+<form method="post" action="{{ url_for('add_letter') }}" enctype="multipart/form-data" data-default-department-id="{{ number_department_id or '' }}">
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label">Номер письма</label>
+      <input type="text" id="reg_number" name="reg_number" class="form-control" value="{{ initial_reg_number }}" {% if not can_manage_reg_numbers %}readonly{% endif %}>
+      <div class="form-text">
+        {% if can_manage_reg_numbers %}
+        Администратор может изменить номер вручную.
+        {% else %}
+        Номер формируется автоматически по настройкам администратора.
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Дата</label>
+      <input type="date" name="letter_date" class="form-control" value="{{ now().strftime('%Y-%m-%d') }}">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Предприятие</label>
+      <div class="input-group">
+        <select id="source_id" name="source_id" class="form-select">
+          <option value="">-- выберите предприятие --</option>
+          {% for source in sources %}
+          <option value="{{ source.id }}">{{ source.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#addEnterpriseModal">Добавить</button>
+      </div>
+      <div class="form-text">Поле заполняется из справочника предприятий.</div>
+    </div>
 
-  <div class="mb-3">
-    <label class="form-label">Дата письма</label>
-    <input type="date" name="letter_date" class="form-control" value="{{ now().strftime('%Y-%m-%d') }}">
-  </div>
-
-  <div class="mb-3">
-    <label class="form-label">Содержание письма</label>
-   <textarea name="body" class="form-control" rows="5">{{ body or '' }}</textarea>
-  </div>
-
-  <div class="mb-3">
-    <label class="form-label">Выберите отделы для направления</label>
-    <select name="departments" class="form-select" multiple>
-      {% for d in deps %}
-        <option value="{{ d.id }}">{{ d.name }}</option>
-      {% endfor %}
-    </select>
-    <div class="form-text">Можно выбрать несколько отделов.</div>
-  </div>
-
-  <div class="row">
     <div class="col-md-6">
-      <label class="form-label">Исполнители</label>
-      <select name="executors" class="form-select" multiple>
+      <label class="form-label">Краткое содержание</label>
+      <input type="text" name="subject" class="form-control" value="{{ subject or '' }}" required>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Исполнитель</label>
+      <select id="executor_id" name="executors" class="form-select">
+        <option value="">-- выберите исполнителя --</option>
         {% for u in users %}
-          <option value="{{ u.id }}">{{ u.full_name }} ({{ u.department.name if u.department else '' }})</option>
+        <option value="{{ u.id }}" data-department-id="{{ u.department_id or '' }}">{{ u.full_name }}{% if u.department %} ({{ u.department.name }}){% endif %}</option>
         {% endfor %}
       </select>
     </div>
-    <div class="col-md-6">
-      <label class="form-label">Для ознакомления</label>
-      <select name="observers" class="form-select" multiple>
-        {% for u in users %}
-          <option value="{{ u.id }}">{{ u.full_name }} ({{ u.department.name if u.department else '' }})</option>
+
+    <div class="col-12">
+      <label class="form-label">Подробное содержание</label>
+      <textarea name="body" class="form-control" rows="5">{{ body or '' }}</textarea>
+    </div>
+
+    <div class="col-12">
+      <label class="form-label">Отделы</label>
+      <select name="departments" class="form-select" multiple>
+        {% for d in deps %}
+        <option value="{{ d.id }}">{{ d.name }}</option>
         {% endfor %}
       </select>
     </div>
   </div>
 
   <div class="mt-3 text-end">
-    <button type="submit" class="btn btn-primary">💾 Создать письмо</button>
+    <button type="submit" class="btn btn-primary">Создать письмо</button>
     <a href="{{ url_for('letters_page') }}" class="btn btn-secondary">Отмена</a>
   </div>
 </form>
+
+<div class="modal fade" id="addEnterpriseModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Добавить предприятие</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body">
+        <label for="enterpriseName" class="form-label">Название предприятия</label>
+        <input type="text" id="enterpriseName" class="form-control" placeholder="Введите название">
+        <div id="enterpriseError" class="text-danger small mt-2 d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-primary" id="saveEnterpriseBtn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const saveBtn = document.getElementById("saveEnterpriseBtn");
+  const select = document.getElementById("source_id");
+  const input = document.getElementById("enterpriseName");
+  const errorBox = document.getElementById("enterpriseError");
+  const modalEl = document.getElementById("addEnterpriseModal");
+  const modal = modalEl ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
+
+  if (!saveBtn || !select || !input) {
+    return;
+  }
+
+  saveBtn.addEventListener("click", async function () {
+    const name = input.value.trim();
+    errorBox.classList.add("d-none");
+    errorBox.textContent = "";
+
+    if (!name) {
+      errorBox.textContent = "Введите название предприятия.";
+      errorBox.classList.remove("d-none");
+      return;
+    }
+
+    const body = new URLSearchParams({ name });
+    try {
+      const response = await fetch("{{ url_for('quick_add_letter_source') }}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+        },
+        body: body.toString()
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Не удалось добавить предприятие.");
+      }
+
+      let option = Array.from(select.options).find((item) => item.value === String(data.id));
+      if (!option) {
+        option = new Option(data.name, data.id, true, true);
+        select.add(option);
+      } else {
+        option.selected = true;
+      }
+
+      input.value = "";
+      if (modal) {
+        modal.hide();
+      }
+    } catch (error) {
+      errorBox.textContent = error.message || "Не удалось добавить предприятие.";
+      errorBox.classList.remove("d-none");
+    }
+  });
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+  const executor = document.getElementById("executor_id");
+  const numberInput = document.getElementById("reg_number");
+  const form = document.querySelector("form[data-default-department-id]");
+  if (!executor || !numberInput || !form) return;
+
+  async function refreshNumber() {
+    const selected = executor.selectedOptions[0];
+    const departmentId = selected?.dataset.departmentId || form.dataset.defaultDepartmentId;
+    const params = new URLSearchParams({ document_type: "letter" });
+    if (departmentId) params.set("department_id", departmentId);
+    const response = await fetch(`/api/registration-number?${params}`);
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data.number) numberInput.value = data.number;
+  }
+
+  executor.addEventListener("change", refreshNumber);
+});
+</script>
 {% endblock %}

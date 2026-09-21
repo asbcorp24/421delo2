@@ -1,239 +1,694 @@
 {% extends 'layout.html' %}
 {% block content %}
-<h3>Активность #{{ a.id }} — {{ a.title }}</h3>
+<style>
+  .task-print-sheet { display: none; }
+  .task-360 { max-width: 1240px; margin: 0 auto; font-size: .875rem; }
+  .task-360 h3 { font-size: 1.2rem; line-height: 1.3; }
+  .task-360 h4 { font-size: 1.02rem; margin: 1rem 0 .5rem; }
+  .task-360 h5 { font-size: .92rem; margin-bottom: .55rem; }
+  .task-360 hr { margin: .85rem 0; opacity: .25; }
+  .task-360 .task-meta-line { display: inline-flex; align-items: center; gap: .3rem; padding: .32rem .58rem; margin: 0 .35rem .35rem 0; border: 1px solid rgba(13, 202, 240, .25); border-radius: .45rem; background: rgba(16, 29, 42, .56); }
+  .task-360 .task-description { padding: .55rem .7rem; margin: .25rem 0 .6rem; border-left: 3px solid #0dcaf0; background: rgba(16, 29, 42, .45); border-radius: 0 .4rem .4rem 0; white-space: pre-wrap; }
+  .task-360 .task-date-list { display: flex; flex-direction: row; flex-wrap: wrap; gap: .45rem; margin-bottom: 0; }
+  .task-360 .task-date-list .list-group-item { flex: 1 1 150px; padding: .45rem .6rem; border: 1px solid rgba(13, 202, 240, .32); border-radius: .45rem !important; background: rgba(16, 29, 42, .72); color: #d9edf6; }
+  .task-360 .task-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin: .8rem 0; align-items: start; }
+  .task-360 .task-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin: .8rem 0; align-items: start; }
+  .task-360 .task-column { display: flex; flex-direction: column; gap: .8rem; min-width: 0; }
+  .task-360 .task-panel { min-width: 0; align-self: stretch; padding: .8rem; border: 1px solid; border-radius: .65rem; }
+  .task-360 .task-panel h4, .task-360 .task-panel h5 { margin-top: 0; color: #e9f8ff; }
+  .task-360 .task-panel-dates { border-color: rgba(13, 202, 240, .4); background: linear-gradient(135deg, rgba(13, 202, 240, .11), rgba(16, 29, 42, .55)); }
+  .task-360 .task-panel-journal { border-color: rgba(255, 193, 7, .42); background: linear-gradient(135deg, rgba(255, 193, 7, .10), rgba(16, 29, 42, .55)); }
+  .task-360 .task-panel-extras { border-color: rgba(111, 66, 193, .48); background: linear-gradient(135deg, rgba(111, 66, 193, .13), rgba(16, 29, 42, .55)); }
+  .task-360 .task-panel-documents { border-color: rgba(25, 135, 84, .48); background: linear-gradient(135deg, rgba(25, 135, 84, .12), rgba(16, 29, 42, .55)); }
+  .task-360 .list-group-item { padding: .48rem .65rem; font-size: .84rem; }
+  .task-360 .card { margin-bottom: .7rem !important; }
+  .task-360 .card.p-3 { padding: .8rem !important; }
+  .task-360 #log-list { max-height: 330px; overflow-y: auto; }
+  .task-360 #extra-values-list .card-body { padding: .55rem .7rem; }
+  .task-360 .form-control, .task-360 .form-select { font-size: .875rem; }
+  .task-360 .btn { --bs-btn-padding-y: .32rem; --bs-btn-padding-x: .62rem; font-size: .84rem; }
+  @media (max-width: 576px) {
+    .task-360 { font-size: .84rem; }
+    .task-360 h3 { font-size: 1.04rem; }
+    .task-360 .task-meta-line { display: flex; margin-right: 0; }
+    .task-360 .task-grid, .task-360 .task-columns { grid-template-columns: 1fr; }
+  }
+  @media print {
+    @page { size: A4 portrait; margin: 8mm 10mm; }
+    body * { visibility: hidden !important; }
+    .task-print-sheet, .task-print-sheet * { visibility: visible !important; }
+    .task-print-sheet { display: block !important; position: absolute; inset: 0; width: 100%; color: #000 !important; font-family: "Times New Roman", serif !important; font-size: 8.5pt; line-height: 1.15; }
+    .task-print-sheet a { color: #000 !important; text-decoration: none !important; }
+    .task-print-requisites { display: flex; justify-content: space-between; min-height: 15mm; font-size: 7.5pt; }
+    .task-print-title { margin: 2mm 0; text-align: center; font-size: 12pt; font-weight: bold; text-transform: uppercase; }
+    .task-print-table { width: 100%; border-collapse: collapse; margin: 2mm 0; }
+    .task-print-table th, .task-print-table td { border: 1px solid #000; padding: 1.1mm 1.5mm; vertical-align: top; }
+    .task-print-table th { width: 34%; background: #eee !important; font-weight: bold; }
+    .task-print-description { min-height: 16mm; border: 1px solid #000; padding: 1.5mm; white-space: pre-wrap; }
+    .task-print-section { margin-top: 2.5mm; break-inside: auto; }
+    .task-print-section h2 { margin: 0 0 1mm; font-size: 8.5pt; font-weight: bold; }
+    .task-print-section table { width: 100%; border-collapse: collapse; font-size: 7.5pt; }
+    .task-print-section th, .task-print-section td { border: 1px solid #000; padding: .8mm 1.2mm; vertical-align: top; }
+    .task-print-section th { background: #eee !important; }
+    .task-print-signatures { display: flex; justify-content: space-between; gap: 10mm; margin-top: 5mm; }
+    .task-print-signatures > div { width: 48%; }
+  }
+</style>
 
-<p>
+<div class="task-360">
+<section class="task-print-sheet">
+  <div class="task-print-requisites"><div>Организация: ______________________________</div><div>УТВЕРЖДАЮ<br>________________ /____________/<br>«___» __________ 20__ г.</div></div>
+  <div class="task-print-title">Задача № {{ a.id }}</div>
+  <table class="task-print-table"><tbody>
+    <tr><th>Наименование задачи</th><td>{{ a.title }}</td></tr>
+    <tr><th>Тип задачи</th><td>{{ a.type.name if a.type else '-' }}</td></tr>
+    <tr><th>Исполнитель</th><td>{{ a.owner.full_name if a.owner else '-' }}</td></tr>
+    <tr><th>Приоритет</th><td>{{ get_priority_meta(a.priority).label }}</td></tr>
+    <tr><th>Дата начала</th><td>{{ a.start_date.strftime('%d.%m.%Y') if a.start_date else '-' }}</td></tr>
+    <tr><th>Срок исполнения</th><td>{{ a.end_date.strftime('%d.%m.%Y') if a.end_date else 'Не установлен' }}</td></tr>
+    <tr><th>Статус</th><td>{{ get_status_meta(a.status).label }}{% if a.status_comment %}. {{ a.status_comment }}{% endif %}</td></tr>
+    <tr><th>Исходный документ</th><td>{{ a.outgoing_document or '-' }}</td></tr>
+  </tbody></table>
+  <div><strong>Содержание задачи</strong></div><div class="task-print-description">{{ a.description or '-' }}</div>
+  <section class="task-print-section">
+    <h2>Журнал действий</h2>
+    <table><thead><tr><th>Дата</th><th>Действие</th><th>Статус</th></tr></thead><tbody>
+      {% for log in a.logs %}<tr><td>{{ log.entry_date.strftime('%d.%m.%Y %H:%M') if log.entry_date else '-' }}</td><td>{{ log.text }}</td><td>{{ 'Выполнено' if log.is_done else 'Не выполнено' }}</td></tr>{% else %}<tr><td colspan="3">Действия не зарегистрированы.</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  <section class="task-print-section">
+    <h2>Дополнительные значения</h2>
+    {% set print_extras = a.extra_values | from_json %}
+    <table><thead><tr><th>Наименование</th><th>Значение</th></tr></thead><tbody>
+      {% for value in print_extras %}<tr><td>{{ value.rusname or value.name or '-' }}</td><td>{{ value.value or '-' }}</td></tr>{% else %}<tr><td colspan="2">Дополнительные значения отсутствуют.</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  <section class="task-print-section">
+    <h2>История изменений</h2>
+    <table><thead><tr><th>Дата</th><th>Автор</th><th>Изменение</th></tr></thead><tbody>
+      {% for item in history %}<tr><td>{{ item.created_at.strftime('%d.%m.%Y %H:%M') if item.created_at else '-' }}</td><td>{{ item.author.full_name if item.author else 'Система' }}</td><td><strong>{{ item.action }}</strong>{% if item.details %}: {{ item.details }}{% endif %}</td></tr>{% else %}<tr><td colspan="3">История изменений отсутствует.</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  <div class="task-print-signatures"><div>Поставил задачу: __________________ /____________/</div><div>Исполнитель: __________________ /____________/</div></div>
+</section>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+  <h3 class="mb-0">Задача #{{ a.id }} — {{ a.title }}</h3>
+  <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Печать</button>
+  {% if current_user.role in ['admin', 'superadmin'] %}
+  <a href="{{ url_for('edit_activity', activity_id=a.id) }}" class="btn btn-outline-info">Редактировать задачу</a>
+  {% endif %}
+</div>
+
+<p class="task-meta-line">
   <strong>Тип:</strong> {{ a.type.name if a.type else '—' }} |
-  <strong>Статус:</strong> {{ a.status }}
+  <strong>Статус:</strong>
+  {% set status_meta = get_status_meta(a.status) %}
+  <span class="badge {{ status_meta.class }}" {% if status_meta.style %}style="{{ status_meta.style }}"{% endif %}>{{ status_meta.label }}</span>
+  {% set priority_meta = get_priority_meta(a.priority) %}
+  | <strong>Приоритет:</strong> <span class="badge {{ priority_meta.class }}">{{ priority_meta.label }}</span>
 </p>
 
-<p><strong>Описание:</strong><br>{{ a.description or '—' }}</p>
+{% if current_user.role in ['admin', 'superadmin', 'deputy'] %}
+<form method="post" action="{{ url_for('restore_activity' if a.archived_at else 'archive_activity', activity_id=a.id) }}" class="mb-3">
+  <button class="btn btn-outline-warning">{{ 'Восстановить из архива' if a.archived_at else 'Архивировать задачу' }}</button>
+</form>
+{% endif %}
 
-<hr>
+<p class="task-meta-line">
+  <strong>Исполнитель:</strong>
+  {{ a.owner.full_name if a.owner else '—' }}
+  {% if current_user.id != a.owner_id %}
+    <span class="badge bg-secondary">Чужая задача</span>
+  {% endif %}
+</p>
 
+{% if a.assigned_department %}
+<p class="task-meta-line"><strong>Отдел-адресат:</strong> {{ a.assigned_department.name }}</p>
+{% endif %}
+
+{% if a.source_letter %}
+<p class="task-meta-line"><strong>Исходный документ:</strong>
+  <a href="{{ url_for('memo_view', memo_id=a.source_letter.id) if a.source_letter.source and a.source_letter.source.name == 'Служебная записка' else url_for('letter_view', letter_id=a.source_letter.id) }}">
+    {{ 'Служебная записка' if a.source_letter.source and a.source_letter.source.name == 'Служебная записка' else 'Письмо' }} №{{ a.source_letter.reg_number or a.source_letter.id }}
+  </a>
+</p>
+{% endif %}
+
+{% if a.completion_memo %}
+<p class="task-meta-line"><strong>Закрыта служебной:</strong>
+  <a href="{{ url_for('memo_view', memo_id=a.completion_memo.id) }}">№{{ a.completion_memo.reg_number or a.completion_memo.id }} — {{ a.completion_memo.subject }}</a>
+</p>
+{% endif %}
+
+{% if a.status == 'postponed' and a.postponed_to %}
+<p class="task-meta-line"><strong>Перенесена на:</strong> {{ a.postponed_to.strftime('%d.%m.%Y') }}</p>
+{% endif %}
+{% if a.status_comment %}
+<p class="task-description"><strong>{% if a.status == 'postponed' %}Причина переноса{% elif a.status == 'not_done' %}Причина невыполнения{% else %}Комментарий к статусу{% endif %}:</strong><br>{{ a.status_comment }}</p>
+{% endif %}
+
+{% if can_delegate %}
+<form method="post" action="{{ url_for('redirect_activity', activity_id=a.id) }}" class="card bg-dark border-info p-3 mb-3">
+  <h5 class="text-info mb-3">Перенаправить задачу</h5>
+  <div class="row g-3 align-items-end">
+    <div class="col-md-5">
+      <label class="form-label">Другому сотруднику</label>
+      <select name="target_user_id" class="form-select">
+        <option value="">-- не выбран --</option>
+        {% for user in delegation_users %}
+        <option value="{{ user.id }}">{{ user.full_name }}{% if user.department %} ({{ user.department.name }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-5">
+      <label class="form-label">Или в отдел</label>
+      <select name="target_department_id" class="form-select">
+        <option value="">-- не выбран --</option>
+        {% for department in delegation_departments %}
+        <option value="{{ department.id }}">{{ department.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2"><button class="btn btn-warning w-100">Направить</button></div>
+  </div>
+  <div class="form-text">Выберите только одного сотрудника или только один отдел. Перенаправление сохраняется в журнале действий.</div>
+</form>
+{% endif %}
+
+{% if not can_edit %}
+<div class="alert alert-warning">
+  Вы просматриваете задачу другого пользователя. Редактирование и добавление действий недоступны.
+</div>
+{% endif %}
+
+<p class="task-description"><strong>Описание:</strong><br>{{ a.description or '—' }}</p>
+
+<div class="task-columns">
+<div class="task-column">
+<section class="task-panel task-panel-dates">
 <h5>Даты</h5>
-<ul class="list-group mb-3">
+<ul class="list-group task-date-list">
   <li class="list-group-item">
-    <strong>Дата создания:</strong> {{ a.start_date.strftime('%d.%m.%Y') if a.start_date else '-' }}
+    <strong>Дата создания:</strong>
+    {{ a.start_date.strftime('%d.%m.%Y') if a.start_date else '-' }}
   </li>
   <li class="list-group-item">
     <strong>Дата окончания:</strong>
     {{ a.end_date.strftime('%d.%m.%Y') if a.end_date else '-' }}
   </li>
   <li class="list-group-item">
-  {% if a.end_date %}
-  {% set days_left = (a.end_date.date() - now().date()).days %}
-  <p><strong>До окончания:</strong>
-     {% if days_left >= 0 %}
-        {{ days_left }} дн.
-     {% else %}
-        <span class="text-danger">Просрочено на {{ days_left | abs }} дн.</span>
-     {% endif %}
-  </p>
-{% else %}
-  <p><em>Дата окончания не указана</em></p>
-{% endif %}
+    {% if a.end_date %}
+      {% set days_left = (a.end_date.date() - now().date()).days %}
+      <p><strong>До окончания:</strong>
+        {% if days_left >= 0 %}
+          {{ days_left }} дн.
+        {% else %}
+          <span class="text-danger">Просрочено на {{ days_left | abs }} дн.</span>
+        {% endif %}
+      </p>
+    {% else %}
+      <p><em>Дата окончания не указана</em></p>
+    {% endif %}
   </li>
 </ul>
+</section>
 
-<hr>
+<section class="task-panel task-panel-extras">
+<h5>Дополнительные значения</h5>
+{% if can_modify_work %}
+<div id="extra-values-list" class="mb-3">
+{% set extras = a.extra_values | from_json %}
+{% if extras %}
+  {% for v in extras %}
+    <div class="card mb-2 shadow-sm">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <strong>{{ v.rusname }}</strong>
+          <div class="text-muted small">{{ v.type }}</div>
+          <div>{{ v.value or '-' }}</div>
+        </div>
+        <button class="btn btn-sm btn-outline-danger delete-extra" data-id="{{ v.id }}">🗑</button>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <p class="text-muted">Нет дополнительных значений</p>
+{% endif %}
+</div>
+<button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addExtraModal">➕ Добавить значение</button>
+{% else %}
+<div class="text-muted">Дополнительные значения недоступны для изменения.</div>
+{% endif %}
+</section>
+</div>
+
+<div class="task-column">
+<section class="task-panel task-panel-journal">
 <h4>Журнал действий</h4>
+<h5>История изменений</h5>
+<ul class="list-group mb-2">
+  {% for item in history %}<li class="list-group-item"><strong>{{ item.action }}</strong> — {{ item.details }}<br><small class="text-muted">{{ item.author.full_name if item.author else 'Система' }}, {{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</small></li>{% else %}<li class="list-group-item text-muted">История изменений пока пуста.</li>{% endfor %}
+</ul>
 
-<form id="new-log-form" class="mb-3">
+{% if can_modify_work %}
+<form id="new-log-form" class="mb-3"
+      method="post"
+      action="{{ url_for('add_activity_log', activity_id=a.id) }}">
   <div class="row g-2">
     <div class="col-md-7">
       <textarea name="text" class="form-control" placeholder="Новое действие..." required></textarea>
     </div>
     <div class="col-md-3">
-      <input type="datetime-local" name="entry_date" class="form-control" value="{{ now().strftime('%Y-%m-%dT%H:%M') }}">
+      <input type="datetime-local" name="entry_date" class="form-control"
+             value="{{ now().strftime('%Y-%m-%dT%H:%M') }}">
     </div>
     <div class="col-md-2">
-      <button class="btn btn-outline-primary w-100">Добавить действие</button>
+      <button type="submit" class="btn btn-outline-primary w-100">Добавить действие</button>
     </div>
   </div>
 </form>
+{% endif %}
 
 <ul id="log-list" class="list-group mb-3">
   {% for log in a.logs if not log.parent_id %}
     {% include 'partials/_log_item.html' with context %}
   {% endfor %}
 </ul>
+</section>
 
-<hr>
-
+<section class="task-panel task-panel-documents">
 <h5>Документы</h5>
-<ul>
-  {% for d in a.documents %}
-    <li><a href="{{ url_for('download_document', doc_id=d.id) }}">{{ d.filename }}</a></li>
-  {% else %}
-    <li class="text-muted">Нет документов</li>
-  {% endfor %}
-</ul>
-
-<form method="post" enctype="multipart/form-data" action="{{ url_for('upload_activity_document', activity_id=a.id) }}">
-  <input type="file" name="file" class="form-control mb-2" required>
-  <button class="btn btn-outline-success">Загрузить</button>
-</form>
-
-{% if current_user.id == a.owner_id or current_user.role in ['manager','admin'] %}
-  {% if a.status != 'done' %}
-    <form method="post" action="{{ url_for('mark_activity_done', activity_id=a.id) }}" class="mt-3">
-      <button class="btn btn-warning">Отметить выполненной</button>
-    </form>
-  {% elif current_user.role in ['manager','admin'] and a.status != 'approved' %}
-    <form method="post" action="{{ url_for('approve_activity', activity_id=a.id) }}" class="mt-3">
-      <textarea name="comment" class="form-control mb-2" placeholder="Комментарий руководителя"></textarea>
-      <button name="approve" value="true" class="btn btn-success me-2">Утвердить</button>
-      <button name="approve" value="false" class="btn btn-danger">Отклонить</button>
-    </form>
-  {% endif %}
-{% endif %}
-<hr>
-
-<h5>Связанные письма</h5>
 <ul class="list-group mb-3">
-  {% for le in a.letters %}
-    <li class="list-group-item">
-      <a href="{{ url_for('letter_view', letter_id=le.id) }}">
-        📄 Письмо №{{ le.id }} — {{ le.subject }}
-      </a>
-      <br>
-      <small class="text-muted">
-        Автор: {{ le.author.full_name if le.author else '—' }},
-        Дата: {{ le.letter_date.strftime('%d.%m.%Y') if le.letter_date else '-' }}
-      </small>
+  {% for d in a.documents %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <a href="{{ url_for('download_activity_document', doc_id=d.id) }}">📎 {{ d.filename }}</a><br>
+        <small class="text-muted">Загружен:
+          {{ d.uploaded_at.strftime('%d.%m.%Y %H:%M') if d.uploaded_at else '-' }}
+        </small>
+      </div>
+      {% if d.doc_rec %}
+        <button class="btn btn-sm btn-outline-primary"
+                data-bs-toggle="modal"
+                data-bs-target="#docModal{{ d.id }}">
+          👁 Просмотр текста
+        </button>
+      {% endif %}
     </li>
+
   {% else %}
-    <li class="list-group-item text-muted">Нет связанных писем</li>
+    <li class="list-group-item text-muted">Нет документов</li>
   {% endfor %}
 </ul>
+{% if can_modify_work %}
+<form method="post" enctype="multipart/form-data" action="{{ url_for('upload_activity_document', activity_id=a.id) }}" class="mt-2">
+  <input type="file" name="file" class="form-control form-control-sm mb-2" required>
+  <button class="btn btn-outline-success">Загрузить файл</button>
+</form>
+{% endif %}
+</section>
+</div>
+</div>
+
+{% for d in a.documents if d.doc_rec %}
+<div class="modal fade" id="docModal{{ d.id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title">📄 {{ d.filename }}</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <pre style="white-space: pre-wrap; font-family: monospace;">{{ d.doc_rec }}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% if can_modify_work %}
+<div class="modal fade" id="addExtraModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Добавить значение</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <select id="extra-template" class="form-select mb-3"></select>
+        <div id="extra-field"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-primary" id="save-extra-btn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if can_change_status %}
+  <form method="post" action="{{ url_for('update_activity_status', activity_id=a.id) }}" class="card bg-dark border-info p-3 mt-4">
+    <h5 class="text-info mb-3">Смена статуса</h5>
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label" for="activity-status">Статус</label>
+        <select id="activity-status" name="status" class="form-select">
+          <option value="in_progress" {% if a.status in ['open', 'in_progress'] %}selected{% endif %}>В работе</option>
+          <option value="done" {% if a.status == 'done' %}selected{% endif %}>Выполнено</option>
+          <option value="not_done" {% if a.status == 'not_done' %}selected{% endif %}>Не выполнено</option>
+          {% if can_extend_deadline %}<option value="extend">Продлить срок</option>{% endif %}
+          <option value="postponed" {% if a.status == 'postponed' %}selected{% endif %}>Перенос</option>
+          <option value="cancelled" {% if a.status == 'cancelled' %}selected{% endif %}>Отмена</option>
+        </select>
+      </div>
+      <div class="col-md-4 d-none" id="postponed-to-group">
+        <label class="form-label" for="postponed-to">Перенести на</label>
+        <input id="postponed-to" type="date" name="postponed_to" class="form-control" min="{{ now().strftime('%Y-%m-%d') }}" value="{{ a.postponed_to.strftime('%Y-%m-%d') if a.postponed_to else '' }}">
+      </div>
+      <div class="col-md-4 d-none" id="completion-memo-group">
+        <label class="form-label" for="completion-memo">Закрыть служебной запиской</label>
+        <select id="completion-memo" name="completion_memo_id" class="form-select">
+          <option value="">-- не выбрано --</option>
+          {% for memo in closure_memos %}
+          <option value="{{ memo.id }}" {% if a.completion_memo_id == memo.id %}selected{% endif %}>№{{ memo.reg_number or memo.id }} — {{ memo.subject }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Необязательно. Выберите служебную записку, подтверждающую выполнение.</div>
+      </div>
+      <div class="col-md-4"><button class="btn btn-primary w-100">Сохранить статус</button></div>
+      <div class="col-12">
+        <label class="form-label" id="status-comment-label" for="status-comment">Комментарий</label>
+        <textarea id="status-comment" name="comment" class="form-control" rows="2" placeholder="Комментарий к изменению статуса">{{ a.status_comment or '' }}</textarea>
+        <div class="form-text" id="status-comment-help">Для «Не выполнено» укажите причину. Для «Перенос» или «Продлить срок» укажите новую дату и причину.</div>
+      </div>
+    </div>
+  </form>
+  <script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const status = document.getElementById('activity-status');
+    const dateGroup = document.getElementById('postponed-to-group');
+    const dateInput = document.getElementById('postponed-to');
+    const completionMemoGroup = document.getElementById('completion-memo-group');
+    const comment = document.getElementById('status-comment');
+    const label = document.getElementById('status-comment-label');
+    function updateStatusFields() {
+      const isPostponed = status.value === 'postponed' || status.value === 'extend';
+      const isExtension = status.value === 'extend';
+      const isNotDone = status.value === 'not_done';
+      const isDone = status.value === 'done';
+      dateGroup.classList.toggle('d-none', !isPostponed);
+      completionMemoGroup.classList.toggle('d-none', !isDone);
+      dateInput.required = isPostponed;
+      comment.required = isPostponed || isNotDone;
+      label.textContent = isExtension ? 'Причина продления' : (isPostponed ? 'Причина переноса' : (isNotDone ? 'Причина невыполнения' : 'Комментарий'));
+    }
+    status.addEventListener('change', updateStatusFields);
+    updateStatusFields();
+  });
+  </script>
+{% endif %}
+
+{% if a.status == 'done' and current_user.role in ['manager', 'admin', 'superadmin'] %}
+  <form method="post" action="{{ url_for('approve_activity', activity_id=a.id) }}" class="mt-3">
+    <textarea name="comment" class="form-control mb-2" placeholder="Комментарий руководителя"></textarea>
+    <button name="approve" value="true" class="btn btn-success me-2">Утвердить</button>
+    <button name="approve" value="false" class="btn btn-danger">Отклонить</button>
+  </form>
+{% endif %}
+
+{% if not can_change_status and status_locked %}
+  <div class="alert alert-secondary mt-4 mb-0">
+    Статус задачи зафиксирован. Изменить его могут только администратор или заместитель.
+  </div>
+{% endif %}
+
+<hr>
+{% if a.letters %}
+  <div class="card mt-4">
+    <div class="card-header bg-light"><strong>📨 Связанные письма</strong></div>
+    <ul class="list-group list-group-flush">
+      {% for le in a.letters %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <a href="{{ url_for('letter_view', letter_id=le.id) }}">
+              <strong>Письмо №{{ le.id }}</strong>: {{ le.subject }}
+            </a>
+            <div class="text-muted small">
+              от {{ le.author.full_name if le.author else '—' }},
+              дата {{ le.letter_date.strftime('%d.%m.%Y') if le.letter_date else '—' }}
+            </div>
+          </div>
+          <a href="{{ url_for('letter_view', letter_id=le.id) }}" class="btn btn-sm btn-outline-primary">Открыть</a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% else %}
+  <p class="text-muted mt-3">Нет связанных писем</p>
+{% endif %}
+
+<!-- === Modal: добавить поддействие === -->
+<div class="modal fade" id="addLogModal" tabindex="-1" aria-labelledby="addLogLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form class="modal-content" id="addLogForm">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title" id="addLogLabel">➕ Добавить поддействие</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" name="parent_id">
+
+        <div class="mb-3">
+          <label class="form-label text-info">Текст поддействия</label>
+          <textarea name="text" class="form-control" placeholder="Введите текст..." required></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label text-info">Дата и время выполнения</label>
+          <input type="datetime-local" name="entry_date"
+                 class="form-control"
+                 value="{{ now().strftime('%Y-%m-%dT%H:%M') }}">
+        </div>
+      </div>
+
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="submit" class="btn btn-primary">💾 Добавить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- === Modal: редактировать действие === -->
+<div class="modal fade" id="editLogModal" tabindex="-1" aria-labelledby="editLogLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form class="modal-content" id="editLogForm">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title" id="editLogLabel">✏️ Редактировать действие</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" name="log_id">
+
+        <div class="mb-3">
+          <label class="form-label text-info">Новый текст</label>
+          <textarea name="text" class="form-control" placeholder="Введите новый текст..." required></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="submit" class="btn btn-success">💾 Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener("DOMContentLoaded", () => {
+  const addModal = new bootstrap.Modal(document.getElementById('addLogModal'));
+  const editModal = new bootstrap.Modal(document.getElementById('editLogModal'));
 
-  // добавление корневого лога (оставь как у тебя было)
-  const newLogForm = document.getElementById('new-log-form');
-  if (newLogForm) {
-    newLogForm.addEventListener('submit', async function(e) {
-      e.preventDefault();
-      const text = this.querySelector('textarea[name="text"]').value.trim();
-      const entry_date = this.querySelector('input[name="entry_date"]').value;
-      if (!text) return;
-
-      const res = await fetch(window.location.pathname + '/logs', {
-        method: 'POST',
-        body: new FormData(newLogForm)
-      });
-      const data = await res.json();
-      if (data.success) {
-        document.getElementById('log-list')
-          .insertAdjacentHTML('beforeend', renderLogItem(data.log));
-        this.reset();
-      }
+  // === обработчик кнопки "Добавить поддействие"
+  document.querySelectorAll(".open-add-modal").forEach(btn => {
+    btn.addEventListener("click", e => {
+      const logId = e.currentTarget.dataset.logId;
+      document.querySelector("#addLogModal [name=parent_id]").value = logId;
+      addModal.show();
     });
-  }
-
-  // делегирование кликов
-  document.addEventListener('click', async function(e) {
-
-    // --- отметка "выполнено"
-    if (e.target.classList.contains('toggle-done')) {
-      const li = e.target.closest('li[data-id]');
-      if (!li) return;
-      const id = li.dataset.id;
-
-      const res = await fetch(`/logs/${id}/toggle_done`, { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        li.classList.toggle('text-decoration-line-through', data.is_done);
-        li.classList.toggle('text-muted', data.is_done);
-      }
-      return;
-    }
-
-    // --- добавление поддействия (поддерживаем обе кнопки)
-    if (e.target.classList.contains('add-child') || e.target.classList.contains('add-child-btn')) {
-      const li = e.target.closest('li[data-id]');
-      if (!li) return;
-      const id = li.dataset.id;
-
-      // ищем поля рядом с нажатой кнопкой
-      const group = e.target.closest('.input-group');
-      if (!group) { console.warn('Не найден .input-group'); return; }
-
-      const textInput = group.querySelector('.child-text');
-      const dateInput = group.querySelector('.child-date');
-      if (!textInput || !dateInput) { console.warn('Нет .child-text или .child-date'); return; }
-
-      const text = textInput.value.trim();
-      const entry_date = dateInput.value; // формат от <input type="datetime-local">
-      if (!text) return;
-
-      const fd = new FormData();
-      fd.append('text', text);
-      fd.append('entry_date', entry_date);
-
-      const res = await fetch(`/logs/${id}/add_child`, { method: 'POST', body: fd });
-      const data = await res.json();
-      if (data.success) {
-        let ul = li.querySelector('ul');
-        if (!ul) {
-          ul = document.createElement('ul');
-          ul.classList.add('mt-2', 'ps-4', 'border-start');
-          li.appendChild(ul);
-        }
-        ul.insertAdjacentHTML('beforeend', renderLogItem(data.child));
-        textInput.value = '';
-      } else {
-        alert('Ошибка при добавлении поддействия');
-      }
-      return;
-    }
-
-    // --- удаление лога (если у тебя есть кнопка .delete-log)
-    if (e.target.classList.contains('delete-log')) {
-      const li = e.target.closest('li[data-id]');
-      if (!li) return;
-      const id = li.dataset.id;
-      if (!confirm('Удалить это действие и его поддействия?')) return;
-
-      const res = await fetch(`/logs/${id}/delete`, { method: 'POST' });
-      const data = await res.json();
-      if (data.success) li.remove();
-      return;
-    }
   });
 
-  // генератор HTML для одного лога
-  function renderLogItem(log) {
-    return `
-      <li class="list-group-item small" data-id="${log.id}">
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <input type="checkbox" class="form-check-input me-2 toggle-done" ${log.is_done ? 'checked' : ''}>
-            <strong>${log.text}</strong>
-          </div>
-          <div>
-            <small class="text-muted">${log.entry_date || ''}</small>
-            <button type="button" class="btn btn-sm btn-outline-danger ms-2 delete-log">🗑</button>
-          </div>
-        </div>
-        <div class="mt-2">
-          <div class="input-group input-group-sm mb-1">
-            <input type="text" class="form-control child-text" placeholder="Новое поддействие...">
-            <input type="datetime-local" class="form-control child-date" value="${new Date().toISOString().slice(0,16)}">
-            <button type="button" class="btn btn-outline-primary add-child-btn">Добавить</button>
-          </div>
-        </div>
-      </li>`;
+  // === обработчик кнопки "Редактировать"
+  document.querySelectorAll(".edit-log").forEach(btn => {
+    btn.addEventListener("click", e => {
+      const logId = e.currentTarget.dataset.logId;
+      const text = e.currentTarget.dataset.logText || "";
+      document.querySelector("#editLogModal [name=log_id]").value = logId;
+      document.querySelector("#editLogModal [name=text]").value = text.trim();
+      editModal.show();
+    });
+  });
+
+  // === форма добавления поддействия (с датой)
+  const addForm = document.getElementById("addLogForm");
+  addForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const parentId = addForm.querySelector("[name=parent_id]").value;
+    const text = addForm.querySelector("[name=text]").value.trim();
+    const entryDate = addForm.querySelector("[name=entry_date]").value;
+    if (!text) return alert("Введите текст поддействия!");
+    const resp = await fetch(`/logs/${parentId}/add_child`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ text, entry_date: entryDate })
+    });
+    if (resp.ok) location.reload();
+    else alert("Ошибка при добавлении!");
+  });
+
+  // === форма редактирования действия
+  const editForm = document.getElementById("editLogForm");
+  editForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const logId = editForm.querySelector("[name=log_id]").value;
+    const text = editForm.querySelector("[name=text]").value.trim();
+    if (!text) return alert("Введите текст!");
+    const resp = await fetch(`/logs/${logId}/edit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ text })
+    });
+    if (resp.ok) location.reload();
+    else alert("Ошибка при редактировании!");
+  });
+});
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // Удаление лога (действия)
+  document.querySelectorAll(".delete-log").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const logId = e.currentTarget.dataset.logId;
+      if (!logId) return;
+
+      if (!confirm("Удалить это действие со всеми поддействиями?")) return;
+
+      try {
+        const resp = await fetch(`/logs/${logId}/delete`, { method: "POST" });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const data = await resp.json();
+        if (data.success) {
+          // ① удалить из DOM без перезагрузки
+          const row = document.querySelector(`[data-log-item="${logId}"]`);
+          if (row) row.remove();
+          // ② или просто перезагрузить страницу:
+          // location.reload();
+        } else {
+          alert("Не удалось удалить: " + (data.error || "Ошибка"));
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Ошибка при удалении");
+      }
+    });
+  });
+});
+</script>
+
+<script>
+document.addEventListener("change", async (event) => {
+  const checkbox = event.target.closest(".toggle-done");
+  if (!checkbox) return;
+
+  const desiredState = checkbox.checked;
+  const logId = checkbox.dataset.logId;
+  const logItem = checkbox.closest(".log-item");
+  checkbox.disabled = true;
+  try {
+    const response = await fetch(`/logs/${logId}/toggle_done`, { method: "POST" });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const data = await response.json();
+    checkbox.checked = Boolean(data.is_done);
+    if (logItem) logItem.classList.toggle("is-done", Boolean(data.is_done));
+  } catch (error) {
+    checkbox.checked = !desiredState;
+    alert("Не удалось сохранить отметку выполнения.");
+  } finally {
+    checkbox.disabled = false;
   }
 });
 </script>
 
 
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const modalElement = document.getElementById('addExtraModal');
+  if (!modalElement) return;
 
+  const modal = new bootstrap.Modal(modalElement);
+  const select = document.getElementById('extra-template');
+  const field = document.getElementById('extra-field');
+  const saveBtn = document.getElementById('save-extra-btn');
 
+  // Загружаем шаблоны значений
+  const res = await fetch('/api/value-templates');
+  const templates = await res.json();
+  select.innerHTML = '<option value="">Выберите шаблон...</option>' +
+    templates.map(t => `<option value="${t.id}" data-type="${t.type}" data-name="${t.name}" data-rusname="${t.rusname}">${t.rusname} (${t.type})</option>`).join('');
 
+  // При выборе шаблона — показываем поле ввода
+  select.addEventListener('change', e => {
+    const opt = select.selectedOptions[0];
+    if (!opt.value) return field.innerHTML = '';
+    const type = opt.dataset.type;
+    let inputHTML = '';
+    switch (type) {
+      case 'int': inputHTML = `<input type="number" class="form-control" id="extra-value" placeholder="Введите значение">`; break;
+      case 'float': inputHTML = `<input type="number" step="any" class="form-control" id="extra-value" placeholder="Введите значение">`; break;
+      case 'bool': inputHTML = `<select id="extra-value" class="form-select"><option value="true">Да</option><option value="false">Нет</option></select>`; break;
+      case 'date': inputHTML = `<input type="date" class="form-control" id="extra-value">`; break;
+      case 'text': inputHTML = `<textarea class="form-control" id="extra-value" rows="2" placeholder="Введите текст"></textarea>`; break;
+      default: inputHTML = `<input type="text" class="form-control" id="extra-value" placeholder="Введите значение">`;
+    }
+    field.innerHTML = `
+      <label class="form-label">${opt.dataset.rusname}</label>
+      ${inputHTML}
+    `;
+  });
 
+  // Сохранение нового значения
+  saveBtn.addEventListener('click', async () => {
+    const opt = select.selectedOptions[0];
+    if (!opt.value) return alert('Выберите шаблон!');
+    const value = document.getElementById('extra-value')?.value || null;
 
+    const fd = new FormData();
+    fd.append('template_id', opt.value);
+    fd.append('value', value);
 
+    const res = await fetch(`/activities/{{ a.id }}/add_value`, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      modal.hide();
+      location.reload();
+    } else alert('Ошибка при сохранении');
+  });
+
+  // Удаление значения
+  document.addEventListener('click', async (e) => {
+    if (e.target.classList.contains('delete-extra')) {
+      const id = e.target.dataset.id;
+      if (!confirm('Удалить значение?')) return;
+      const res = await fetch(`/activities/{{ a.id }}/delete_value/${id}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) location.reload();
+    }
+  });
+});
+</script>
+</div>
 {% endblock %}

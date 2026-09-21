@@ -1,0 +1,28 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container py-4">
+  <h3>📜 Логи загрузок документов</h3>
+  <table class="table table-sm table-hover mt-3">
+    <thead>
+      <tr>
+        <th>Дата</th>
+        <th>Пользователь</th>
+        <th>Тип</th>
+        <th>ID документа</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in logs %}
+      <tr>
+        <td>{{ l.timestamp.strftime("%d.%m.%Y %H:%M:%S") }}</td>
+        <td>{{ l.user.full_name }}</td>
+        <td>{{ 'Письмо' if l.doc_type == 'letter' else 'Активность' }}</td>
+        <td>{{ l.doc_id }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-muted text-center">Нет записей</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

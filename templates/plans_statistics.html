@@ -1,0 +1,38 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h3 class="mb-1">Аналитика выполнения планов</h3><div class="text-muted">{{ period_start.strftime('%d.%m.%Y') }} - {{ period_end.strftime('%d.%m.%Y') }}</div></div><div><a href="{{ url_for('plans_list') }}" class="btn btn-outline-info">К планам</a><button type="button" class="btn btn-outline-light" onclick="window.print()">Печать</button></div></div>
+  <form method="get" class="card bg-dark border-info mb-4"><div class="card-body row g-3 align-items-end"><div class="col-md-3"><label class="form-label text-info">Месяц</label><input type="month" name="month" value="{{ month_value }}" class="form-control"></div><div class="col-md-auto"><button class="btn btn-primary">Сформировать</button></div></div></form>
+  <div class="row g-3 mb-4"><div class="col-md-3"><div class="card bg-dark border-info h-100"><div class="card-body"><div class="text-info">Всего пунктов</div><div class="display-6 text-light">{{ summary.total }}</div></div></div></div><div class="col-md-3"><div class="card bg-dark border-success h-100"><div class="card-body"><div class="text-success">Выполнено</div><div class="display-6 text-light">{{ summary.done }}</div></div></div></div><div class="col-md-3"><div class="card bg-dark border-danger h-100"><div class="card-body"><div class="text-danger">Невыполнено</div><div class="display-6 text-light">{{ summary.not_done }}</div></div></div></div><div class="col-md-3"><div class="card bg-dark border-warning h-100"><div class="card-body"><div class="text-warning">Выполнение</div><div class="display-6 text-light">{{ summary.completion }}%</div></div></div></div></div>
+  <div class="row g-3 mb-4 print-charts"><div class="col-lg-4"><div class="card bg-dark border-info h-100"><div class="card-body"><h5 class="text-info">Общий результат</h5><canvas id="statusChart"></canvas></div></div></div><div class="col-lg-8"><div class="card bg-dark border-info h-100"><div class="card-body"><h5 class="text-info">Выполнение по отделам</h5><canvas id="departmentsChart"></canvas></div></div></div></div>
+  <div class="card bg-dark border-info mb-4"><div class="card-header text-info">Сводно по отделам</div><div class="table-responsive"><table class="table table-dark table-hover align-middle mb-0"><thead><tr><th>Отдел</th><th>Всего</th><th>Выполнено</th><th>Невыполнено</th><th>Отменено</th><th>Запланировано</th><th>Процент выполнения</th></tr></thead><tbody>{% for row in department_rows %}<tr><td class="fw-semibold">{{ row.name }}</td><td>{{ row.total }}</td><td><span class="badge bg-success">{{ row.done }}</span></td><td><span class="badge bg-danger">{{ row.not_done }}</span></td><td><span class="badge bg-dark">{{ row.cancelled }}</span></td><td><span class="badge bg-secondary">{{ row.planned }}</span></td><td style="min-width:160px;"><div class="progress" style="height:10px"><div class="progress-bar bg-info" style="width:{{ row.completion }}%"></div></div><small>{{ row.completion }}%</small></td></tr>{% else %}<tr><td colspan="7" class="text-center text-muted py-4">Данных за выбранный период нет.</td></tr>{% endfor %}</tbody></table></div></div>
+  <div class="card bg-dark border-info mb-4 print-charts"><div class="card-body"><h5 class="text-info">Выполнение по сотрудникам</h5><canvas id="executorsChart"></canvas></div></div>
+  <div class="card bg-dark border-info"><div class="card-header text-info">Детализация по исполнителям</div><div class="table-responsive"><table class="table table-dark table-hover align-middle mb-0"><thead><tr><th>Исполнитель</th><th>Всего</th><th>Выполнено</th><th>Невыполнено</th><th>Отменено</th><th>Запланировано</th><th>Процент выполнения</th></tr></thead><tbody>{% for row in executor_rows %}<tr><td class="fw-semibold">{{ row.user.full_name }}</td><td>{{ row.total }}</td><td><span class="badge bg-success">{{ row.done }}</span></td><td><span class="badge bg-danger">{{ row.not_done }}</span></td><td><span class="badge bg-dark">{{ row.cancelled }}</span></td><td><span class="badge bg-secondary">{{ row.planned }}</span></td><td style="min-width:160px;"><div class="progress" style="height:10px"><div class="progress-bar bg-info" style="width:{{ row.completion }}%"></div></div><small>{{ row.completion }}%</small></td></tr>{% else %}<tr><td colspan="7" class="text-center text-muted py-4">Данных за выбранный период нет.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script>
+const chartData = {{ chart_data|tojson }};
+const commonLegend = { labels: { color: '#d8eef2' } };
+new Chart(document.getElementById('statusChart'), {
+  type: 'doughnut', data: { labels: chartData.status_labels, datasets: [{ data: chartData.status_values, backgroundColor: ['#198754', '#dc3545', '#6c757d', '#ffc107'], borderColor: '#15242a', borderWidth: 3 }] },
+  options: { plugins: { legend: commonLegend }, cutout: '55%' }
+});
+new Chart(document.getElementById('departmentsChart'), {
+  type: 'bar', data: { labels: chartData.department_labels, datasets: [
+    { label: 'Выполнено', data: chartData.department_done, backgroundColor: '#198754' },
+    { label: 'Невыполнено', data: chartData.department_not_done, backgroundColor: '#dc3545' },
+    { label: 'Запланировано', data: chartData.department_planned, backgroundColor: '#ffc107' }
+  ] },
+  options: { responsive: true, scales: { x: { stacked: true, ticks: { color: '#d8eef2' }, grid: { color: 'rgba(216,238,242,.12)' } }, y: { stacked: true, beginAtZero: true, ticks: { color: '#d8eef2', precision: 0 }, grid: { color: 'rgba(216,238,242,.12)' } } }, plugins: { legend: commonLegend } }
+});
+new Chart(document.getElementById('executorsChart'), {
+  type: 'bar', data: { labels: chartData.executor_labels, datasets: [
+    { label: 'Выполнено', data: chartData.executor_done, backgroundColor: '#198754' },
+    { label: 'Невыполнено', data: chartData.executor_not_done, backgroundColor: '#dc3545' },
+    { label: 'Запланировано', data: chartData.executor_planned, backgroundColor: '#ffc107' }
+  ] },
+  options: { responsive: true, scales: { x: { stacked: true, ticks: { color: '#d8eef2' }, grid: { color: 'rgba(216,238,242,.12)' } }, y: { stacked: true, beginAtZero: true, ticks: { color: '#d8eef2', precision: 0 }, grid: { color: 'rgba(216,238,242,.12)' } } }, plugins: { legend: commonLegend } }
+});
+</script>
+<style>@media print { nav, footer, form, .btn, .alert { display:none !important; } .container { max-width:100% !important; } .card { border:1px solid #999 !important; box-shadow:none !important; } .print-charts { break-inside:avoid; } }</style>
+{% endblock %}

@@ -1,0 +1,10 @@
+^C:\PROJECT\OTD421\CPP\CHAT_TRAY\BUILD\CMAKEFILES\E7F11E4CF72D12CC9B6A0CB15A5FD051\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/project/otd421/cpp/chat_tray -BC:/project/otd421/cpp/chat_tray/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/project/otd421/cpp/chat_tray/build/otd421_chat_tray.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

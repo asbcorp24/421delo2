@@ -1,44 +1,125 @@
 {% set _depth = _depth | default(0) %}
 {% if _depth < 10 %}
-<li class="list-group-item py-2 {% if log.is_done %}text-decoration-line-through text-muted{% endif %}" data-id="{{ log.id }}">
+<style>
+  ul.log-tree {
+    list-style: none;
+    margin: 0;
+    padding-left: 0;
+  }
+
+  .log-item {
+    position: relative;
+    margin-left: {{ _depth * 24 }}px;
+    margin-bottom: 12px;
+    padding: 14px 18px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+    transition: all 0.2s ease-in-out;
+  }
+
+  .log-item:hover {
+    box-shadow: 0 5px 10px rgba(0,0,0,0.15);
+    transform: translateY(-2px);
+  }
+
+  .log-item.is-done { opacity: .68; }
+  .log-item.is-done .log-text { text-decoration: line-through; }
+
+  /* вертикальные соединительные линии */
+  .log-item::before {
+    content: "";
+    position: absolute;
+    left: -14px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: #dee2e6;
+  }
+
+  /* стрелочка к поддействию */
+  .log-item::after {
+    content: "➤";
+    position: absolute;
+    left: -22px;
+    top: 10px;
+    font-size: 13px;
+    color: #6c757d;
+  }
+
+  .log-item.root::before,
+  .log-item.root::after {
+    content: none;
+  }
+
+  .log-text {
+    font-weight: 500;
+    font-size: 1rem;
+    color: #212529;
+  }
+
+  .log-meta {
+    font-size: 0.85rem;
+    color: #6c757d;
+  }
+
+  .big-check {
+    width: 28px;
+    height: 28px;
+    accent-color: #0d6efd;
+  }
+
+  .btn-circle {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: 18px;
+  }
+
+  .btn-outline-primary { border-color: #0d6efd; color: #0d6efd; }
+  .btn-outline-primary:hover { background: #0d6efd; color: white; }
+
+  .btn-outline-secondary { border-color: #6c757d; color: #6c757d; }
+  .btn-outline-secondary:hover { background: #6c757d; color: white; }
+
+  .btn-danger { border-color: #dc3545; color: #dc3545; }
+  .btn-danger:hover { background: #dc3545; color: white; }
+</style>
+
+<li class="log-item {% if not log.parent_id %}root{% endif %}{% if log.is_done %} is-done{% endif %}" data-id="{{ log.id }}" data-log-item="{{ log.id }}" >
   <div class="d-flex justify-content-between align-items-center">
-    <div>
-      <input type="checkbox" class="form-check-input me-2 toggle-done" {% if log.is_done %}checked{% endif %}>
-      <strong>{{ log.text }}</strong>
-      {% if log.parent_id %}
-        <span class="badge bg-info text-dark ms-2">подзадача</span>
-      {% endif %}
-      <br>
-      <small class="text-muted">{{ log.entry_date.strftime('%d.%m.%Y %H:%M') }}</small>
-      <button type="button"
-        class="btn btn-sm btn-outline-danger delete-log ms-2"
-        title="Удалить действие">
-  🗑
-</button>
+    <div class="flex-grow-1 me-3">
+      <div class="log-text">{{ log.text }}</div>
+      <div class="log-meta">{{ log.entry_date.strftime('%d.%m.%Y %H:%M') }}</div>
     </div>
 
-    <!-- Кнопка добавить поддействие -->
+    {% if can_modify_work %}
+    <div class="d-flex align-items-center gap-2">
+      <input type="checkbox" class="form-check-input big-check toggle-done" data-log-id="{{ log.id }}"
+             {% if log.is_done %}checked{% endif %}>
 
+        <button type="button" class="btn btn-circle btn-outline-primary open-add-modal"
+                data-log-id="{{ log.id }}" title="Добавить поддействие">➕</button>
+        <button type="button" class="btn btn-circle btn-outline-secondary edit-log"
+                data-log-id="{{ log.id }}" data-log-text="{{ log.text }}" title="Редактировать действие">✏️</button>
+        <button type="button" class="btn btn-circle btn-danger delete-log"
+                data-log-id="{{ log.id }}" title="Удалить действие">🗑</button>
+    </div>
+    {% endif %}
   </div>
 
-  <!-- Дочерние поддействия -->
-{% if log.children and log.children|length > 0 %}
-  <ul class="mt-2 ps-4 border-start">
+  {% if log.children %}
+  <ul class="log-tree mt-3 ps-4">
     {% for child in log.children %}
       {% with log=child, _depth=_depth + 1 %}
         {% include 'partials/_log_item.html' %}
       {% endwith %}
     {% endfor %}
   </ul>
-{% endif %}
-
-  <!-- Поле добавления нового поддействия -->
-  <div class="mt-2">
-    <div class="input-group input-group-sm mb-1">
-      <input type="text" class="form-control child-text" placeholder="Новое поддействие...">
-      <input type="date" class="form-control child-date" value="{{ datetime.utcnow().strftime('%Y-%m-%d') }}">
-      <button class="btn btn-outline-primary add-child-btn" data-log-id="{{ log.id }}">Добавить</button>
-    </div>
-  </div>
+  {% endif %}
 </li>
 {% endif %}

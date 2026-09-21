@@ -1,0 +1,46 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+  <div>
+    <h3 class="mb-0">Архив служебных записок</h3>
+    <div class="text-muted">Архивные записи не отображаются в основном журнале.</div>
+  </div>
+  <a href="{{ url_for('memos_page') }}" class="btn btn-secondary">К журналу</a>
+</div>
+
+<table class="table table-striped align-middle shadow-sm">
+  <thead class="table-dark">
+    <tr>
+      <th>№</th>
+      <th>Дата</th>
+      <th>Отдел</th>
+      <th>Краткое содержание</th>
+      <th>Исполнитель</th>
+      <th>Дата архивации</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for memo in memos %}
+    {% set executor_user = executor_lookup.get(memo.executor_id) if executor_lookup else None %}
+    {% set executor_name = executor_user.full_name if executor_user else ((memo.recipients | selectattr('role', 'equalto', 'executor') | map(attribute='user.full_name') | list | first) or '-') %}
+    <tr>
+      <td>{{ memo.reg_number or memo.id }}</td>
+      <td>{{ (memo.letter_date or memo.created_at).strftime('%d.%m.%Y') if (memo.letter_date or memo.created_at) else '-' }}</td>
+      <td>{{ (memo.departments | map(attribute='name') | list | first) or '-' }}</td>
+      <td>{{ memo.subject or '-' }}</td>
+      <td>{{ executor_name }}</td>
+      <td>{{ memo.archived_at.strftime('%d.%m.%Y %H:%M') if memo.archived_at else '-' }}</td>
+      <td class="text-nowrap">
+        <a href="{{ url_for('memo_view', memo_id=memo.id) }}" class="btn btn-sm btn-outline-primary">Открыть</a>
+        <form method="post" action="{{ url_for('restore_memo', memo_id=memo.id) }}" class="d-inline">
+          <button class="btn btn-sm btn-outline-success">Восстановить</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-center text-muted">Архив служебных записок пуст.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

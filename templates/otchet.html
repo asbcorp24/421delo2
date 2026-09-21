@@ -1,0 +1,329 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3>Управление отчётами</h3>
+
+<form method="post" class="mb-4">
+  <input type="hidden" name="id" id="form_id">
+  <div class="mb-2">
+    <label>Название отчета</label>
+    <input type="text" name="name" id="form_name" class="form-control" required>
+  </div>
+  <div class="mb-2">
+    <label>SQL-запрос</label>
+    <textarea name="sql" id="form_sql" class="form-control" rows="3" required></textarea>
+  </div>
+    <div class="form-group  col-md-12 ">
+
+                                    <label class="control-label" for="name">Теги</label>
+
+                                                                            <div>
+    <a class="btn btn-info" id="addjson">Добавить</a>
+    <a class="btn btn-success" id="savejson">Сохранить</a>
+    <a class="btn btn-info" id="loadjson">Загрузить названия из текста</a>
+<div class="pull-right" id="btjson"></div>
+    <table class="table table-striped" id="tablejson">
+        <thead>
+        <tr><th class="hname">Имя</th>
+              <th class="aname">Имя на английском</th>
+        <th class="hsel">Тип данных</th>
+        <th class="hspisok">Запрос или плейсхолдер или список</th>
+
+        <th class="hid"></th>
+
+
+        <th>Действия</th>
+        </tr></thead>
+        <tbody id="bodyjson">
+        </tbody>
+    </table>
+
+   </div>
+<div class="modal fade" id="modaljson" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" style="box-shadow: 2px 1px 4px 1px">
+            <div class="modal-header">
+                <h5 class="modal-title">Title</h5>
+
+            </div>
+            <div class="modal-body">
+                <label>Введите текст</label>
+                <textarea class="form-control" placeholder="Введите текст, каждая строка- новая запись" id="tareajson"></textarea>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-info" id="addtxtjson">Добавить</a> <a class="btn btn-danger" data-dismiss="modal">Отменить</a>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    /* Custom shadow for modal */
+    .modal-content {
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    }
+</style>
+<div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Modal title</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">×</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="dynamic-buttons"></div>
+                <textarea id="textarea" class="form-control" rows="5"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+                                                                                                        </div>
+  <div class="mb-2">
+    <label>JSON (описание столбцов)</label>
+    <textarea name="json" id="storejson" class="form-control" rows="3"></textarea>
+  </div>
+  <div class="mb-2">
+    <label>JS код (визуализация)</label>
+    <textarea name="js" id="form_js" class="form-control" rows="3"></textarea>
+  </div>
+  <button class="btn btn-primary">💾 Сохранить</button>
+</form>
+
+<h5>Сохранённые отчёты</h5>
+<table class="table table-bordered table-sm">
+  <thead><tr><th>ID</th><th>Название</th><th>SQL</th><th>Действия</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.id }}</td>
+      <td>{{ r.name }}</td>
+      <td><code>{{ r.sql|truncate(100) }}</code></td>
+      <td>
+{% set row_data = r._mapping.items() | list %}
+{% set row_dict = dict(row_data) %}
+<button class="btn btn-sm btn-warning" onclick='editRow({{ row_dict | tojson | safe }})'>✏️ Редактировать</button>
+
+
+
+     {#   <a href="{{ url_for('run_otchet', id=r.id) }}" class="btn btn-sm btn-success">📈 Показать</a>#}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+function transliterate(text) {
+    var cyrillicToLatin = {
+      'А': 'A', 'а': 'a', 'Б': 'B', 'б': 'b', 'В': 'V', 'в': 'v',
+      'Г': 'G', 'г': 'g', 'Д': 'D', 'д': 'd', 'Е': 'E', 'е': 'e',
+      'Ё': 'E', 'ё': 'e', 'Ж': 'Zh', 'ж': 'zh', 'З': 'Z', 'з': 'z',
+      'И': 'I', 'и': 'i', 'Й': 'I', 'й': 'i', 'К': 'K', 'к': 'k',
+      'Л': 'L', 'л': 'l', 'М': 'M', 'м': 'm', 'Н': 'N', 'н': 'n',
+      'О': 'O', 'о': 'o', 'П': 'P', 'п': 'p', 'Р': 'R', 'р': 'r',
+      'С': 'S', 'с': 's', 'Т': 'T', 'т': 't', 'У': 'U', 'у': 'u',
+      'Ф': 'F', 'ф': 'f', 'Х': 'Kh', 'х': 'kh', 'Ц': 'Ts', 'ц': 'ts',
+      'Ч': 'Ch', 'ч': 'ch', 'Ш': 'Sh', 'ш': 'sh', 'Щ': 'Shch', 'щ': 'shch',
+      'Ъ': '', 'ъ': '', 'Ы': 'Y', 'ы': 'y', 'Ь': '', 'ь': '',
+      'Э': 'E', 'э': 'e', 'Ю': 'Yu', 'ю': 'yu', 'Я': 'Ya', 'я': 'ya'
+    };
+    return text.split('').map(function(char) {
+      return cyrillicToLatin[char] || char;
+    }).join('').replace(/\s+/g, '_');
+  }
+
+    function newID() {
+      return `${String(performance.now()).replace('.', '')}${Date.now()}`;
+    }
+
+    // Остальная логика
+function addFieldRow(ind, index) {
+      const id = ind.id || newID();
+      const checked = ind.act ? 'checked' : '';
+      const selected = ind.sel || 1;
+      const rowHtml = `
+        <tr id="tr${index}">
+          <input type="hidden" class="dscv" value="${ind.ogr || ''}">
+          <td class="hname"><input class="form-control pnme" placeholder="Имя поля" value="${ind.name || ''}"></td>
+          <td class="aname"><input class="form-control aname" value="${ind.aname || ''}"></td>
+          <td class="hsel">
+            <select id="sl${index}" class="form-control seljson">
+              <option value="1">Текст</option>
+              <option value="2">Число</option>
+              <option value="3">Дата</option>
+  <option value="4">Месяц</option>
+              <option value="6">Время</option>
+              <option value="4">Список</option>
+              <option value="5">Список из запроса</option>
+
+            </select>
+          </td>
+
+          <td class="hspisok"><input class="form-control hspisok" value="${ind.spisok || ''}"></td>
+
+
+          <td>
+            <a class="btn btn-danger deljson">Удалить</a>
+
+          </td>
+        </tr>`;
+      $('#bodyjson').append(rowHtml);
+      $(`#sl${index} option[value='${selected}']`).prop('selected', true);
+    }
+
+
+function editRow(data) {
+  document.getElementById('form_id').value = data.ID;
+  document.getElementById('form_name').value = data.name;
+  document.getElementById('form_sql').value = data.sql;
+  document.getElementById('storejson').value = data.json;
+  document.getElementById('form_js').value = data.js;
+      const fields = JSON.parse(data.json || "[]");
+    $('#bodyjson').empty();
+    fields.forEach((field, index) => addFieldRow(field, index));
+}
+  document.addEventListener("DOMContentLoaded", () => {
+    let currentRow, drt, x = 0;
+    const rowsPerPage = 10;
+
+
+    function insertAtCursor(textarea, text) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const value = textarea.value;
+      textarea.value = value.slice(0, start) + text + value.slice(end);
+      textarea.selectionStart = textarea.selectionEnd = start + text.length;
+    }
+
+
+
+    function renderPaginationButtons(total) {
+      const pages = Math.ceil(total / rowsPerPage);
+      for (let i = 1; i <= pages; i++) {
+        $('#btjson').append(`<a class="btn btn-info paginjson" data-id="${i}" style="margin-right:3px">${i}</a>`);
+      }
+    }
+
+    function showPage(pageNum) {
+      $('#bodyjson tr').hide();
+      const start = (pageNum - 1) * rowsPerPage + 1;
+      for (let i = 0; i < rowsPerPage; i++) {
+        $(`#tr${start + i}`).show();
+      }
+    }
+
+
+
+    function collectFields() {
+      const fields = [];
+      $('#bodyjson tr').each(function () {
+        fields.push({
+          ogr: $(this).find('input.dscv').val(),
+          name: $(this).find('.hname input').val(),
+          aname: $(this).find('.aname input').val(),
+          sel: $(this).find('.hsel select').val(),
+          spisok: $(this).find('.hspisok input').val(),
+
+          id: $(this).find('.hid input').val(),
+
+        });
+      });
+      return fields;
+    }
+
+    // Инициализация
+    let jso = [];
+    try {
+      jso = JSON.parse($('#storejson').val());
+    } catch (e) {}
+
+    jso.forEach((obj, index) => {
+      x++;
+      addFieldRow(obj, x);
+    });
+
+    renderPaginationButtons(x);
+    $('.paginjson').first().trigger('click');
+
+    // События
+    $('#btjson').on('click', '.paginjson', function () {
+      showPage($(this).data('id'));
+    });
+
+    $('#bodyjson').on('click', '.deljson', function () {
+      $(this).closest('tr').remove();
+    });
+
+    $('#bodyjson').on('click', '.edits', function () {
+      openEditor($(this).closest('tr'));
+    });
+
+    $('#bodyjson').on('click', '.frch', function () {
+      drt = $(this).closest('tr').find('input.spjson');
+      openEditor();
+    });
+
+
+
+    $('#savejson').click(() => {
+      $('#storejson').val(JSON.stringify(collectFields()));
+    });
+
+    $('#addjson').click(() => {
+      x++;
+      addFieldRow({}, x);
+    });
+
+    $('#loadjson').click(() => {
+      $('#tareajson').val('');
+      $('#modaljson').modal('show');
+    });
+
+    $('#addtxtjson').click(() => {
+      const lines = $('#tareajson').val().split(/\r?\n/);
+      lines.forEach(line => {
+        $('#addjson').trigger('click');
+        $('#bodyjson tr').last().find('input.pnme').val(line);
+      });
+      $('#modaljson').modal('hide');
+    });
+
+  });
+   $('body').on('change','.seljson', function () {
+  const sjs = $(this).val();
+
+  const $input = $(this).closest('tr').find('input.hspisok');
+console.log([sjs,$input]);
+  if (sjs == '1') {
+    $input.attr('placeholder', 'введите текст');
+  } else if (sjs == '2') {
+    $input.attr('placeholder', 'введите число');
+  } else if (sjs == '3') {
+    $input.attr('placeholder', 'введите дату');
+  } else if (sjs == '4') {
+    $input.attr('placeholder', 'список через запятую');
+  }
+  else if (sjs == '5') {
+    $input.attr('placeholder', 'Запрос, возвращать id,name');
+  }
+
+  else {
+    $input.attr('placeholder', '');
+  }
+});
+
+    $('body').on('input','.pnme', function() {
+      var nameValue = $(this).val();
+      var loginValue = transliterate(nameValue);
+      $(this).closest('tr').find('input.aname').val(loginValue);
+
+    });
+</script>
+
+{% endblock %}

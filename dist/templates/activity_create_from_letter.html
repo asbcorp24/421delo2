@@ -1,0 +1,40 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3>Создание активности на основе письма №{{ le.id }}</h3>
+
+<form method="post" class="card p-3 shadow-sm">
+  <div class="mb-3">
+    <label class="form-label">Тип активности</label>
+    <select name="type_id" class="form-select">
+      <option value="">-- выберите тип --</option>
+      {% for t in types %}
+        <option value="{{ t.id }}">{{ t.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Название</label>
+    <input type="text" name="title" class="form-control" required placeholder="Введите заголовок активности">
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Описание</label>
+    <textarea name="description" class="form-control" rows="4" placeholder="Краткое описание задачи"></textarea>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col">
+      <label class="form-label">Дата начала</label>
+      <input type="date" name="start_date" class="form-control">
+    </div>
+    <div class="col">
+      <label class="form-label">Дата окончания</label>
+      <input type="date" name="end_date" class="form-control">
+    </div>
+  </div>
+
+  <button class="btn btn-success">💾 Создать активность</button>
+  <a href="{{ url_for('letter_view', letter_id=le.id) }}" class="btn btn-secondary">Отмена</a>
+</form>
+{% endblock %}

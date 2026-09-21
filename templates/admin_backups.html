@@ -1,0 +1,33 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Резервные копии базы данных</h3>
+    <div class="text-muted">Архив содержит целостный снимок базы SQLite.</div>
+  </div>
+  <form method="post" action="{{ url_for('create_database_backup') }}">
+    <button class="btn btn-success">Создать архив сейчас</button>
+  </form>
+</div>
+
+<div class="card bg-dark border-info">
+  <div class="card-header text-info">Доступные архивы</div>
+  <div class="table-responsive">
+    <table class="table table-dark table-hover align-middle mb-0">
+      <thead><tr><th>Файл</th><th>Дата создания</th><th>Размер</th><th></th></tr></thead>
+      <tbody>
+        {% for backup in backups %}
+        <tr>
+          <td class="font-monospace">{{ backup.name }}</td>
+          <td>{{ backup.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+          <td>{{ backup.size_kb }} KB</td>
+          <td><a href="{{ url_for('download_database_backup', filename=backup.name) }}" class="btn btn-sm btn-outline-info">Скачать</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center text-muted py-4">Архивов пока нет.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

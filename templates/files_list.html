@@ -1,0 +1,92 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>📁 Общие документы</h3>
+    <a href="{{ url_for('upload_general_document') }}" class="btn btn-outline-primary">➕ Загрузить</a>
+  </div>
+
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr>
+        <th>Имя файла</th>
+        <th>Описание</th>
+        <th>Загрузил</th>
+        <th>Дата</th>
+        <th>Действия</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in docs %}
+      <tr>
+        <td>{{ d.filename }}</td>
+        <td>{{ d.description or '-' }}</td>
+        <td>{{ d.user.full_name }}</td>
+        <td>{{ d.uploaded_at.strftime("%d.%m.%Y %H:%M") }}</td>
+        <td class="d-flex gap-1">
+
+          <!-- Открыть -->
+          <a href="{{ url_for('view_file', file_id=d.id) }}" class="btn btn-sm btn-outline-success">
+            📂 Открыть
+          </a>
+
+          <!-- Управление доступом -->
+          {% if current_user.id == d.uploaded_by or current_user.role == 'admin' %}
+          <a href="{{ url_for('file_access', file_id=d.id) }}" class="btn btn-sm btn-outline-dark">
+            🔒 Доступ
+          </a>
+          {% endif %}
+
+          <!-- Ссылка -->
+          {% if shared_links.get(d.id) %}
+            <a href="{{ url_for('open_shared_link', token=shared_links[d.id].token) }}"
+               class="btn btn-sm btn-outline-info" title="Открыть ссылку">
+              🔗 Ссылка
+            </a>
+          {% else %}
+            <button class="btn btn-sm btn-outline-secondary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#shareModal{{ d.id }}">
+              🤝 Поделиться
+            </button>
+          {% endif %}
+
+        </td>
+      </tr>
+
+      <!-- === Модальное окно создания ссылки === -->
+      <div class="modal fade" id="shareModal{{ d.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <form method="post" action="{{ url_for('share_file', file_id=d.id) }}">
+              <div class="modal-header">
+                <h5 class="modal-title">Создать ссылку для "{{ d.filename }}"</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label">Срок действия ссылки:</label>
+                  <select name="days" class="form-select">
+                    <option value="0">Бессрочно</option>
+                    <option value="1">1 день</option>
+                    <option value="7">7 дней</option>
+                    <option value="30">30 дней</option>
+                  </select>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-primary">Создать ссылку</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {% else %}
+      <tr><td colspan="5" class="text-muted text-center">Нет документов</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

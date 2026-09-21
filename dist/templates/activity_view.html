@@ -1,0 +1,428 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3>Задача #{{ a.id }} — {{ a.title }}</h3>
+
+<p>
+  <strong>Тип:</strong> {{ a.type.name if a.type else '—' }} |
+  <strong>Статус:</strong> {{ a.status }}
+</p>
+
+<p>
+  <strong>Исполнитель:</strong>
+  {{ a.owner.full_name if a.owner else '—' }}
+  {% if current_user.id != a.owner_id %}
+    <span class="badge bg-secondary">Чужая задача</span>
+  {% endif %}
+</p>
+
+{% if not can_edit %}
+<div class="alert alert-warning">
+  Вы просматриваете задачу другого пользователя. Редактирование и добавление действий недоступны.
+</div>
+{% endif %}
+
+<p><strong>Описание:</strong><br>{{ a.description or '—' }}</p>
+
+<hr>
+<h5>Даты</h5>
+<ul class="list-group mb-3">
+  <li class="list-group-item">
+    <strong>Дата создания:</strong>
+    {{ a.start_date.strftime('%d.%m.%Y') if a.start_date else '-' }}
+  </li>
+  <li class="list-group-item">
+    <strong>Дата окончания:</strong>
+    {{ a.end_date.strftime('%d.%m.%Y') if a.end_date else '-' }}
+  </li>
+  <li class="list-group-item">
+    {% if a.end_date %}
+      {% set days_left = (a.end_date.date() - now().date()).days %}
+      <p><strong>До окончания:</strong>
+        {% if days_left >= 0 %}
+          {{ days_left }} дн.
+        {% else %}
+          <span class="text-danger">Просрочено на {{ days_left | abs }} дн.</span>
+        {% endif %}
+      </p>
+    {% else %}
+      <p><em>Дата окончания не указана</em></p>
+    {% endif %}
+  </li>
+</ul>
+
+<hr>
+<h4>Журнал действий</h4>
+
+{% if can_edit and a.status != 'done' %}
+<form id="new-log-form" class="mb-3"
+      method="post"
+      action="{{ url_for('add_activity_log', activity_id=a.id) }}">
+  <div class="row g-2">
+    <div class="col-md-7">
+      <textarea name="text" class="form-control" placeholder="Новое действие..." required></textarea>
+    </div>
+    <div class="col-md-3">
+      <input type="datetime-local" name="entry_date" class="form-control"
+             value="{{ now().strftime('%Y-%m-%dT%H:%M') }}">
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-outline-primary w-100">Добавить действие</button>
+    </div>
+  </div>
+</form>
+{% endif %}
+
+<ul id="log-list" class="list-group mb-3">
+  {% for log in a.logs if not log.parent_id %}
+    {% include 'partials/_log_item.html' with context %}
+  {% endfor %}
+</ul>
+
+{% if current_user.role == 'admin' and can_edit %}
+<hr>
+<h5>Дополнительные значения</h5>
+<div id="extra-values-list" class="mb-3">
+
+{% set extras = a.extra_values | from_json %}
+{% if extras %}
+  {% for v in extras %}
+    <div class="card mb-2 shadow-sm">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <strong>{{ v.rusname }}</strong>
+          <div class="text-muted small">{{ v.type }}</div>
+          <div>{{ v.value or '-' }}</div>
+        </div>
+        <button class="btn btn-sm btn-outline-danger delete-extra" data-id="{{ v.id }}">🗑</button>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <p class="text-muted">Нет дополнительных значений</p>
+{% endif %}
+</div>
+
+<button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addExtraModal">
+  ➕ Добавить значение
+</button>
+{% endif %}
+<hr>
+<h5>Документы</h5>
+<ul class="list-group mb-3">
+  {% for d in a.documents %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <a href="{{ url_for('download_activity_document', doc_id=d.id) }}">📎 {{ d.filename }}</a><br>
+        <small class="text-muted">Загружен:
+          {{ d.uploaded_at.strftime('%d.%m.%Y %H:%M') if d.uploaded_at else '-' }}
+        </small>
+      </div>
+      {% if d.doc_rec %}
+        <button class="btn btn-sm btn-outline-primary"
+                data-bs-toggle="modal"
+                data-bs-target="#docModal{{ d.id }}">
+          👁 Просмотр текста
+        </button>
+      {% endif %}
+    </li>
+
+<div class="modal fade" id="addExtraModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Добавить значение</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <select id="extra-template" class="form-select mb-3"></select>
+        <div id="extra-field"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-primary" id="save-extra-btn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+    <!-- Модалка текста документа -->
+    <div class="modal fade" id="docModal{{ d.id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header bg-dark text-white">
+            <h5 class="modal-title">📄 {{ d.filename }}</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <pre style="white-space: pre-wrap; font-family: monospace;">{{ d.doc_rec }}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <li class="list-group-item text-muted">Нет документов</li>
+  {% endfor %}
+</ul>
+
+{% if can_edit %}
+<form method="post" enctype="multipart/form-data"
+      action="{{ url_for('upload_activity_document', activity_id=a.id) }}">
+  <input type="file" name="file" class="form-control mb-2" required>
+  <button class="btn btn-outline-success">Загрузить</button>
+</form>
+{% endif %}
+
+{% if can_edit %}
+  {% if a.status != 'done' %}
+    <form method="post" action="{{ url_for('mark_activity_done', activity_id=a.id) }}" class="mt-3">
+      <button class="btn btn-warning">Отметить выполненной</button>
+    </form>
+  {% elif current_user.role in ['manager', 'admin'] and a.status != 'approved' %}
+    <form method="post" action="{{ url_for('approve_activity', activity_id=a.id) }}" class="mt-3">
+      <textarea name="comment" class="form-control mb-2" placeholder="Комментарий руководителя"></textarea>
+      <button name="approve" value="true" class="btn btn-success me-2">Утвердить</button>
+      <button name="approve" value="false" class="btn btn-danger">Отклонить</button>
+    </form>
+  {% endif %}
+{% endif %}
+
+<hr>
+{% if a.letters %}
+  <div class="card mt-4">
+    <div class="card-header bg-light"><strong>📨 Связанные письма</strong></div>
+    <ul class="list-group list-group-flush">
+      {% for le in a.letters %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <a href="{{ url_for('letter_view', letter_id=le.id) }}">
+              <strong>Письмо №{{ le.id }}</strong>: {{ le.subject }}
+            </a>
+            <div class="text-muted small">
+              от {{ le.author.full_name if le.author else '—' }},
+              дата {{ le.letter_date.strftime('%d.%m.%Y') if le.letter_date else '—' }}
+            </div>
+          </div>
+          <a href="{{ url_for('letter_view', letter_id=le.id) }}" class="btn btn-sm btn-outline-primary">Открыть</a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% else %}
+  <p class="text-muted mt-3">Нет связанных писем</p>
+{% endif %}
+
+<!-- === Modal: добавить поддействие === -->
+<div class="modal fade" id="addLogModal" tabindex="-1" aria-labelledby="addLogLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form class="modal-content" id="addLogForm">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title" id="addLogLabel">➕ Добавить поддействие</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" name="parent_id">
+
+        <div class="mb-3">
+          <label class="form-label text-info">Текст поддействия</label>
+          <textarea name="text" class="form-control" placeholder="Введите текст..." required></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label text-info">Дата и время выполнения</label>
+          <input type="datetime-local" name="entry_date"
+                 class="form-control"
+                 value="{{ now().strftime('%Y-%m-%dT%H:%M') }}">
+        </div>
+      </div>
+
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="submit" class="btn btn-primary">💾 Добавить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- === Modal: редактировать действие === -->
+<div class="modal fade" id="editLogModal" tabindex="-1" aria-labelledby="editLogLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form class="modal-content" id="editLogForm">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title" id="editLogLabel">✏️ Редактировать действие</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" name="log_id">
+
+        <div class="mb-3">
+          <label class="form-label text-info">Новый текст</label>
+          <textarea name="text" class="form-control" placeholder="Введите новый текст..." required></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="submit" class="btn btn-success">💾 Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const addModal = new bootstrap.Modal(document.getElementById('addLogModal'));
+  const editModal = new bootstrap.Modal(document.getElementById('editLogModal'));
+
+  // === обработчик кнопки "Добавить поддействие"
+  document.querySelectorAll(".open-add-modal").forEach(btn => {
+    btn.addEventListener("click", e => {
+      const logId = e.currentTarget.dataset.logId;
+      document.querySelector("#addLogModal [name=parent_id]").value = logId;
+      addModal.show();
+    });
+  });
+
+  // === обработчик кнопки "Редактировать"
+  document.querySelectorAll(".edit-log").forEach(btn => {
+    btn.addEventListener("click", e => {
+      const logId = e.currentTarget.dataset.logId;
+      const text = e.currentTarget.dataset.logText || "";
+      document.querySelector("#editLogModal [name=log_id]").value = logId;
+      document.querySelector("#editLogModal [name=text]").value = text.trim();
+      editModal.show();
+    });
+  });
+
+  // === форма добавления поддействия (с датой)
+  const addForm = document.getElementById("addLogForm");
+  addForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const parentId = addForm.querySelector("[name=parent_id]").value;
+    const text = addForm.querySelector("[name=text]").value.trim();
+    const entryDate = addForm.querySelector("[name=entry_date]").value;
+    if (!text) return alert("Введите текст поддействия!");
+    const resp = await fetch(`/logs/${parentId}/add_child`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ text, entry_date: entryDate })
+    });
+    if (resp.ok) location.reload();
+    else alert("Ошибка при добавлении!");
+  });
+
+  // === форма редактирования действия
+  const editForm = document.getElementById("editLogForm");
+  editForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const logId = editForm.querySelector("[name=log_id]").value;
+    const text = editForm.querySelector("[name=text]").value.trim();
+    if (!text) return alert("Введите текст!");
+    const resp = await fetch(`/logs/${logId}/edit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ text })
+    });
+    if (resp.ok) location.reload();
+    else alert("Ошибка при редактировании!");
+  });
+});
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // Удаление лога (действия)
+  document.querySelectorAll(".delete-log").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const logId = e.currentTarget.dataset.logId;
+      if (!logId) return;
+
+      if (!confirm("Удалить это действие со всеми поддействиями?")) return;
+
+      try {
+        const resp = await fetch(`/logs/${logId}/delete`, { method: "POST" });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const data = await resp.json();
+        if (data.success) {
+          // ① удалить из DOM без перезагрузки
+          const row = document.querySelector(`[data-log-item="${logId}"]`);
+          if (row) row.remove();
+          // ② или просто перезагрузить страницу:
+          // location.reload();
+        } else {
+          alert("Не удалось удалить: " + (data.error || "Ошибка"));
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Ошибка при удалении");
+      }
+    });
+  });
+});
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const modal = new bootstrap.Modal(document.getElementById('addExtraModal'));
+  const select = document.getElementById('extra-template');
+  const field = document.getElementById('extra-field');
+  const saveBtn = document.getElementById('save-extra-btn');
+
+  // Загружаем шаблоны значений
+  const res = await fetch('/api/value-templates');
+  const templates = await res.json();
+  select.innerHTML = '<option value="">Выберите шаблон...</option>' +
+    templates.map(t => `<option value="${t.id}" data-type="${t.type}" data-name="${t.name}" data-rusname="${t.rusname}">${t.rusname} (${t.type})</option>`).join('');
+
+  // При выборе шаблона — показываем поле ввода
+  select.addEventListener('change', e => {
+    const opt = select.selectedOptions[0];
+    if (!opt.value) return field.innerHTML = '';
+    const type = opt.dataset.type;
+    let inputHTML = '';
+    switch (type) {
+      case 'int': inputHTML = `<input type="number" class="form-control" id="extra-value" placeholder="Введите значение">`; break;
+      case 'float': inputHTML = `<input type="number" step="any" class="form-control" id="extra-value" placeholder="Введите значение">`; break;
+      case 'bool': inputHTML = `<select id="extra-value" class="form-select"><option value="true">Да</option><option value="false">Нет</option></select>`; break;
+      case 'date': inputHTML = `<input type="date" class="form-control" id="extra-value">`; break;
+      case 'text': inputHTML = `<textarea class="form-control" id="extra-value" rows="2" placeholder="Введите текст"></textarea>`; break;
+      default: inputHTML = `<input type="text" class="form-control" id="extra-value" placeholder="Введите значение">`;
+    }
+    field.innerHTML = `
+      <label class="form-label">${opt.dataset.rusname}</label>
+      ${inputHTML}
+    `;
+  });
+
+  // Сохранение нового значения
+  saveBtn.addEventListener('click', async () => {
+    const opt = select.selectedOptions[0];
+    if (!opt.value) return alert('Выберите шаблон!');
+    const value = document.getElementById('extra-value')?.value || null;
+
+    const fd = new FormData();
+    fd.append('template_id', opt.value);
+    fd.append('value', value);
+
+    const res = await fetch(`/activities/{{ a.id }}/add_value`, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      modal.hide();
+      location.reload();
+    } else alert('Ошибка при сохранении');
+  });
+
+  // Удаление значения
+  document.addEventListener('click', async (e) => {
+    if (e.target.classList.contains('delete-extra')) {
+      const id = e.target.dataset.id;
+      if (!confirm('Удалить значение?')) return;
+      const res = await fetch(`/activities/{{ a.id }}/delete_value/${id}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) location.reload();
+    }
+  });
+});
+</script>
+{% endblock %}

@@ -2,41 +2,541 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title or 'Документооборот' }}</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta name="theme-color" content="#07131f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Документооборот">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='pwa-icon.svg') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='pwa-icon.svg') }}">
+
+  <!-- Bootstrap -->
+  <link href="{{ url_for('static', filename='bootstrap.min.css')}}" rel="stylesheet">
+
+  <!-- jQuery -->
+  <script src="{{ url_for('static', filename='jquery-3.6.0.min.js')}}"></script>
+
+  <!-- Иконки -->
+  <link href="{{ url_for('static', filename='bootstrap-icons.css')}}" rel="stylesheet">
+
+  <!-- 💎 Дополнительные стили -->
+  <style>
+    body {
+      background: radial-gradient(circle at 20% 30%, #0a0a0f, #0d1117, #080808);
+      color: #e5e5e5;
+      font-family: "Segoe UI", "Roboto", sans-serif;
+      min-height: 100vh;
+    }
+
+    input, textarea, select, option {
+      font-family: "Segoe UI", "Roboto", sans-serif !important;
+    }
+
+    /* === Навбар === */
+    .navbar {
+      background: rgba(10, 10, 15, 0.85);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+      box-shadow: 0 2px 8px rgba(0, 255, 255, 0.1);
+    }
+
+    .navbar-brand {
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: #00e0ff !important;
+      text-shadow: 0 0 10px #00e0ff;
+    }
+
+    .nav-link {
+      color: #bfc7d5 !important;
+      transition: all 0.3s ease;
+    }
+
+    .nav-link:hover, .nav-link.active {
+      color: #00e0ff !important;
+      text-shadow: 0 0 10px #00e0ff;
+    }
+
+    /* === Основной контейнер === */
+    .container {
+      background: rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(12px);
+      border-radius: 15px;
+      padding: 25px;
+      box-shadow: 0 0 25px rgba(0, 255, 255, 0.05);
+      border: 1px solid rgba(0, 255, 255, 0.1);
+      animation: fadeIn 0.5s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    h3, h2, h1 {
+      color: #00e0ff;
+      text-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+      letter-spacing: 0.5px;
+    }
+
+    /* === Кнопки === */
+    .btn-primary {
+      background: linear-gradient(135deg, #007bff, #00d4ff);
+      border: none;
+      box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #0096ff, #00e0ff);
+      box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #cfd6e3;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(0, 255, 255, 0.1);
+      color: #00e0ff;
+    }
+
+    /* === Таблицы === */
+    table {
+      color: #e5e5e5;
+    }
+
+    thead {
+      background: rgba(0, 255, 255, 0.08);
+      color: #00e0ff;
+      border-bottom: 2px solid rgba(0, 255, 255, 0.15);
+    }
+
+    tbody tr:hover {
+      background: rgba(0, 255, 255, 0.05);
+      transition: background 0.3s;
+    }
+
+    .table-success {
+      background-color: rgba(0, 255, 100, 0.15) !important;
+    }
+
+    /* === Сообщения === */
+    .alert {
+      background: rgba(0, 255, 255, 0.1);
+      border: 1px solid rgba(0, 255, 255, 0.3);
+      color: #00e0ff;
+      box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+    }
+
+    /* === Ссылки === */
+    a {
+      color: #00e0ff;
+      text-decoration: none;
+    }
+    a:hover {
+      color: #00ffff;
+      text-shadow: 0 0 6px #00e0ff;
+    }
+
+    /* === Прогресс-бары === */
+    .progress {
+      background-color: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      height: 18px;
+    }
+
+    .progress-bar {
+      transition: width 0.4s ease;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      color: #8fa0b2;
+      font-size: 0.9em;
+    }
+/* === Переопределение Bootstrap bg-light под хай-тек стиль === */
+.bg-light {
+  background: rgba(0, 255, 255, 0.05) !important;
+  color: #00e0ff !important;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+}
+
+/* Немного подсветки при наведении */
+.bg-light:hover {
+  background: rgba(0, 255, 255, 0.1) !important;
+}
+
+/* Для текста внутри светлых элементов */
+.bg-light th, .bg-light td, .bg-light a {
+  color: #e0faff !important;
+}
+
+/* === Гамбургер хай-тек стиль === */
+.navbar-toggler {
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: rgba(0, 255, 255, 0.05);
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.navbar-toggler:hover {
+  background: rgba(0, 255, 255, 0.15);
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
+}
+
+/* Меняем стандартный SVG Bootstrap на неоновый */
+.navbar-dark .navbar-toggler-icon {
+  background-image: url("data:image/svg+xml;charset=utf8,\
+  %3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E\
+  %3Cpath stroke='rgba(0,255,255,0.9)' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E\
+  %3C/svg%3E");
+  filter: drop-shadow(0 0 4px rgba(0,255,255,0.6));
+}
+.table {
+  color: #e6faff !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-collapse: separate !important;
+  border-spacing: 0;
+  border: 1px solid rgba(0, 255, 255, 0.15) !important;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.05);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.table thead {
+  background: linear-gradient(135deg, rgba(0,255,255,0.15), rgba(0,180,255,0.08)) !important;
+  color: #00e0ff !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-bottom: 2px solid rgba(0, 255, 255, 0.25) !important;
+}
+
+.table tbody {
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+.table-bordered > :not(caption) > * > * {
+  border: 1px solid rgba(0, 255, 255, 0.15) !important;
+}
+
+.table-hover tbody tr:hover {
+  background: rgba(0, 255, 255, 0.05) !important;
+  box-shadow: 0 0 12px rgba(0,255,255,0.05) inset;
+  transition: background 0.3s ease;
+}
+.table td, .table th {
+  color: #e6faff !important;
+  background: transparent !important;
+}
+ /* === 🔔 Баннер уведомлений в хай-тек стиле === */
+.notification-banner {
+  position: fixed;
+  top: 15px;
+  right: 20px;
+  z-index: 9999;
+  background: rgba(0, 255, 255, 0.08);
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  box-shadow: 0 0 25px rgba(0, 255, 255, 0.3);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  color: #e0faff;
+  min-width: 320px;
+  animation: fadeInDown 0.6s ease;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.notification-banner h6 {
+  font-weight: 600;
+  color: #00e0ff;
+  text-shadow: 0 0 6px rgba(0,255,255,0.4);
+}
+
+.notification-banner ul {
+  list-style: "• ";
+  padding-left: 20px;
+  margin-bottom: 0;
+  color: #ccefff;
+}
+.modal {
+  position: fixed !important;
+  z-index: 9999 !important;
+  inset: 0;
+  /* ❌ убери display:block */
+}
+
+.modal-backdrop {
+  position: fixed !important;
+  z-index: 9998 !important;
+  background: rgba(0,0,0,0.65) !important;
+  backdrop-filter: blur(6px);
+}
+    .modal-content {
+  background: rgba(10, 20, 25, 0.95) !important; /* полупрозрачный тёмный фон */
+  color: #e0faff !important;
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 12px;
+  box-shadow: 0 0 25px rgba(0, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+}
+
+/* Заголовок модалки */
+.modal-header {
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  background: rgba(0, 255, 255, 0.05);
+  color: #00e0ff;
+  text-shadow: 0 0 8px rgba(0,255,255,0.4);
+}
+
+/* Тело и футер */
+.modal-body {
+  background: transparent;
+  color: #cfefff;
+}
+
+.modal-footer {
+  border-top: 1px solid rgba(0, 255, 255, 0.15);
+  background: rgba(0,255,255,0.03);
+}
+
+/* Кнопка закрытия */
+.btn-close {
+  filter: invert(80%) sepia(100%) hue-rotate(180deg) brightness(110%);
+}
+.btn-close:hover {
+  filter: invert(100%) sepia(100%) hue-rotate(180deg) brightness(130%);
+}
+    /* === исправление выпадания меню === */
+.navbar .dropdown-menu {
+  position: absolute !important;
+  z-index: 2000 !important;
+  background: rgba(5, 20, 25, 0.95) !important;
+  border: 1px solid rgba(0, 255, 255, 0.25) !important;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+}
+
+.dropdown-item:hover {
+  background: rgba(0, 255, 255, 0.08) !important;
+  color: #00e0ff !important;
+  text-shadow: 0 0 8px rgba(0,255,255,0.5);
+}
+
+/* Чтобы меню отображалось поверх контейнера */
+.navbar {
+  z-index: 3000 !important;
+}
+    .table-danger {
+  background-color: rgba(255, 0, 0, 0.15) !important;
+  color: #ffaaaa !important;
+}
+.table-warning {
+  background-color: rgba(255, 255, 0, 0.1) !important;
+  color: #ffee99 !important;
+}
+.table-success {
+  background-color: rgba(0, 255, 0, 0.1) !important;
+  color: #aaffaa !important;
+}
+
+.floating-create-menu {
+  position: fixed;
+  left: 18px;
+  bottom: 24px;
+  z-index: 1080;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.quick-create-btn {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .2s ease, filter .2s ease;
+}
+.quick-create-btn:hover {
+  transform: translateX(4px) scale(1.07);
+  filter: brightness(1.15);
+}
+.quick-create-task { background: linear-gradient(135deg, #007bff, #00c8ff); border-color: #51dfff; box-shadow: 0 0 18px rgba(0, 200, 255, .5); }
+.quick-create-memo { background: linear-gradient(135deg, #d96a00, #ffb000); border-color: #ffcb61; box-shadow: 0 0 18px rgba(255, 159, 0, .45); }
+.quick-create-letter { background: linear-gradient(135deg, #087f4b, #1fc985); border-color: #72f0b5; box-shadow: 0 0 18px rgba(31, 201, 133, .45); }
+@media print { .floating-create-menu { display: none !important; } }
+@media (max-width: 576px) {
+  .floating-create-menu { left: 12px; bottom: 16px; }
+  .quick-create-btn { width: 48px; height: 48px; }
+}
+
+  </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+
+<nav class="navbar navbar-expand-lg navbar-dark mb-4">
   <div class="container-fluid">
-    <a class="navbar-brand" href="/">Документооборот</a>
+    <!-- Бренд -->
+    <a class="navbar-brand" href="/">
+      <i class="bi bi-cpu"></i> Документооборот
+    </a>
 
-    {% if current_user.is_authenticated %}
-      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-        {% if current_user.role == 'admin' %}
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_users') }}">Пользователи</a></li>
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_departments') }}">Отделы</a></li>
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_activity_types') }}">Типы активностей</a></li>
+    <!-- Гамбургер -->
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent"
+            aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
 
-        {% endif %}
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('activities_page') }}">Активности</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('letters_page') }}">Письма</a></li>
-      </ul>
+    <!-- Контент навбара -->
+    <div class="collapse navbar-collapse" id="navbarContent">
+      {% if current_user.is_authenticated %}
+     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
 
-      <div class="d-flex">
-        <span class="navbar-text me-3 text-white">{{ current_user.full_name }}</span>
-        <a class="btn btn-outline-light btn-sm" href="{{ url_for('logout') }}">Выход</a>
+  <!-- 🌍 Основное меню -->
+  <li class="nav-item dropdown">
+    <a class="nav-link dropdown-toggle" href="#" id="mainMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+      🧭 Навигация
+    </a>
+    <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="mainMenu">
+      <li><a class="dropdown-item" href="{{ url_for('dashboard') }}">🏠 Главная</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('activities_page') }}">📋 Задачи</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('letters_page') }}">📨 Письма</a></li>
+       <li><a class="dropdown-item" href="{{ url_for('memos_page') }}">📝 Служебные записки</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('plans_list') }}">📅 Планы и отчеты</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('deadlines_calendar') }}">🗓 Календарь сроков</a></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><a class="dropdown-item" href="{{ url_for('help_page') }}"><i class="bi bi-question-circle"></i> Справка</a></li>
+       {% if current_user.role in ['manager', 'admin', 'superadmin', 'deputy'] %}
+       <li><a class="dropdown-item" href="{{ url_for('activities_analytics') }}">📊 Аналитика задач</a></li>
+       <li><a class="dropdown-item" href="{{ url_for('memos_analytics') }}">📈 Аналитика служебных</a></li>
+       <li><a class="dropdown-item" href="{{ url_for('activities_audit') }}">🧾 Аудит задач</a></li>
+       {% if current_user.role in ['admin', 'superadmin', 'deputy'] %}<li><a class="dropdown-item" href="{{ url_for('activities_archive_page') }}">🗄 Архив задач</a></li>{% endif %}
+       {% endif %}
+     </ul>
+  </li>
+
+  <!-- 💬 Общение -->
+  <li class="nav-item dropdown">
+    <a class="nav-link dropdown-toggle" href="#" id="chatMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+      💬 Общение
+    </a>
+    <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="chatMenu">
+      <li><a class="dropdown-item" href="{{ url_for('chat_page') }}">💭 Чат</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('document_access_manager') }}">🔒 Доступ к документам</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('global_search') }}">🔍 Поиск документов</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('board_page') }}">📋 Доска заданий</a></li>
+      {% if current_user.role in ['admin', 'superadmin', 'deputy'] %}
+      <li><a class="dropdown-item" href="{{ url_for('send_user_notification') }}">🔔 Отправить уведомление</a></li>
+      {% endif %}
+      <li>
+  <a class="dropdown-item" href="{{ url_for('files_list') }}">
+    <i class="bi bi-folder2"></i> Общие документы
+  </a>
+</li>
+    </ul>
+  </li>
+
+  <!-- ⚙️ Администрирование -->
+  {% if current_user.role in ['admin', 'superadmin'] %}
+  <li class="nav-item dropdown">
+    <a class="nav-link dropdown-toggle" href="#" id="adminMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+      ⚙️ Администрирование
+    </a>
+    <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="adminMenu">
+      <li><a class="dropdown-item" href="{{ url_for('admin_users') }}">👥 Пользователи</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('admin_departments') }}">🏢 Отделы</a></li>
+       <li><a class="dropdown-item" href="{{ url_for('admin_activity_types') }}">📂 Типы активностей</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('document_templates_page') }}">📑 Шаблоны задач и служебных</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('admin_letter_sources') }}">🏢 Справочник предприятий</a></li>
+       <li><a class="dropdown-item" href="{{ url_for('admin_settings') }}">⚙ Настройки</a></li>
+       <li><a class="dropdown-item" href="{{ url_for('admin_backups') }}">💾 Резервные копии БД</a></li>
+       <li><a class="dropdown-item" href="{{ url_for('value_templates_page') }}">🧩 Шаблоны значений</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('plans_list') }}">📅 Планы</a></li>
+      <li><a class="dropdown-item" href="/plans/monthly-report">🧾 Отчет по планам</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('manage_reports') }}">📊 Отчёты</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('activities_audit') }}">🧾 Аудит задач</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('report_external_links') }}">🔗 Внешние ссылки на отчеты</a></li>
+
+
+  <li class="nav-item">
+    <a class="nav-link" href="{{ url_for('admin_download_logs') }}">
+      <i class="bi bi-journal-text"></i> Логи загрузок
+    </a>
+  </li>
+
+    </ul>
+  </li>
+  {% endif %}
+
+</ul>
+
+        <!-- Правая часть -->
+<div class="d-flex align-items-center">
+  <div class="dropdown me-2">
+    <button class="btn btn-outline-info btn-sm position-relative" type="button" id="notificationsBell"
+            data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Уведомления">
+      <i class="bi bi-bell-fill"></i>
+      <span id="notificationsBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">0</span>
+    </button>
+    <div class="dropdown-menu dropdown-menu-dark dropdown-menu-end p-0" style="width: 340px; max-width: calc(100vw - 24px);" aria-labelledby="notificationsBell">
+      <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+        <strong>Уведомления</strong>
+        <a class="small" href="{{ url_for('user_notifications_page') }}">Все</a>
       </div>
-    {% endif %}
+      <div id="notificationsDropdownList" class="list-group list-group-flush small">
+        <div class="list-group-item bg-transparent text-muted">Загрузка...</div>
+      </div>
+    </div>
+  </div>
+  <button id="enableNotificationsBtn" type="button" class="btn btn-outline-warning btn-sm me-2 d-none">
+    <i class="bi bi-bell"></i> Уведомления
+  </button>
+  <button id="installAppBtn" type="button" class="btn btn-outline-info btn-sm me-2 d-none">
+    <i class="bi bi-download"></i> Установить
+  </button>
+  <a href="{{ url_for('profile_page') }}" class="btn btn-outline-info btn-sm me-2">
+    <i class="bi bi-person-circle"></i> Профиль
+  </a>
+  <a class="btn btn-outline-danger btn-sm" href="{{ url_for('logout') }}">
+    <i class="bi bi-box-arrow-right"></i> Выход
+  </a>
+</div>
+      {% endif %}
+    </div>
   </div>
 </nav>
+
+{% if current_user.is_authenticated %}
+<div class="floating-create-menu no-print" aria-label="Быстрое создание">
+  <a class="btn quick-create-btn quick-create-task" href="{{ url_for('create_activity') }}" title="Новая задача" aria-label="Новая задача"><i class="bi bi-check2-square"></i></a>
+  <a class="btn quick-create-btn quick-create-memo" href="{{ url_for('new_memo_page') }}" title="Новая служебная записка" aria-label="Новая служебная записка"><i class="bi bi-journal-text"></i></a>
+  <a class="btn quick-create-btn quick-create-letter" href="{{ url_for('new_letter_page') }}" title="Новое письмо" aria-label="Новое письмо"><i class="bi bi-envelope-plus"></i></a>
+</div>
+{% endif %}
+
+<div id="userNotificationToastContainer" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;"></div>
 
 <div class="container">
   {% with messages = get_flashed_messages() %}
     {% if messages %}
-      <div class="alert alert-info">
+      <div class="alert alert-info alert-dismissible fade show">
         {% for msg in messages %}
           {{ msg }}<br>
         {% endfor %}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
       </div>
     {% endif %}
   {% endwith %}
@@ -44,6 +544,427 @@
   {% block content %}{% endblock %}
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<footer>
+  <p>© {{ now().year }} Документооборот | Hi-Tech UI v1.0</p>
+</footer>
+
+<script src="{{ url_for('static', filename='bootstrap.bundle.min.js')}}"></script>
+<script>
+let deferredInstallPrompt = null;
+let installPromptEvaluated = false;
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((error) => {
+      console.error("Не удалось зарегистрировать service worker:", error);
+    });
+  });
+}
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  installPromptEvaluated = true;
+  const installBtn = document.getElementById("installAppBtn");
+  if (installBtn) {
+    installBtn.classList.remove("d-none");
+  }
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  const installBtn = document.getElementById("installAppBtn");
+  if (installBtn) {
+    installBtn.classList.add("d-none");
+  }
+});
+
+document.addEventListener("DOMContentLoaded", function() {
+  const installBtn = document.getElementById("installAppBtn");
+  if (!installBtn) return;
+
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  if (!isStandalone) {
+    installBtn.classList.remove("d-none");
+  }
+
+  installBtn.addEventListener("click", async function() {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      try {
+        await deferredInstallPrompt.userChoice;
+      } catch (error) {
+        console.warn("Установка приложения была отменена:", error);
+      }
+      deferredInstallPrompt = null;
+      installBtn.classList.add("d-none");
+      return;
+    }
+
+    const secure = window.isSecureContext;
+    if (!secure) {
+      alert("Для установки PWA нужен защищённый контекст: HTTPS или localhost. На этом адресе браузер не считает сайт безопасным.");
+      return;
+    }
+
+    alert("Если браузер не показывает установку автоматически, откройте меню Chrome/Edge и выберите 'Установить приложение' или 'Добавить на главный экран'.");
+  });
+});
+
+if (typeof window.loadDirectoryValuesForField !== "function") {
+  window.loadDirectoryValuesForField = async function(fieldConfig) {
+    const cfg = fieldConfig || {};
+
+    if (Array.isArray(cfg.values)) {
+      return cfg.values;
+    }
+
+    const urlCandidates = [
+      cfg.valuesUrl,
+      cfg.values_url,
+      cfg.directoryUrl,
+      cfg.directory_url,
+      cfg.apiUrl,
+      cfg.api_url,
+    ].filter(Boolean);
+
+    for (const url of urlCandidates) {
+      try {
+        const response = await fetch(url, {
+          headers: { "X-Requested-With": "XMLHttpRequest" }
+        });
+        if (!response.ok) continue;
+
+        const payload = await response.json();
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload.values)) return payload.values;
+        if (Array.isArray(payload.items)) return payload.items;
+      } catch (error) {
+        console.warn("Не удалось загрузить значения справочника:", url, error);
+      }
+    }
+
+    return [];
+  };
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  const FIVE_MIN = 5 * 60 * 1000;
+
+  // ключи в localStorage
+  const todayKey = () => {
+    const d = new Date(); d.setHours(0,0,0,0);
+    return "notify_snooze_until_" + d.toISOString().slice(0,10);
+  };
+  const lastHashKey = "notify_last_hash"; // чтобы не показывать один и тот же набор задач
+
+  // стартовая проверка через 2 сек и далее каждые 5 минут
+  setTimeout(checkNotifications, 2000);
+  setInterval(checkNotifications, FIVE_MIN);
+
+  function checkNotifications() {
+    // если включён "не беспокоить до завтра" — выходим
+    if (localStorage.getItem(todayKey()) === "1") return;
+
+    fetch("/api/notifications")
+      .then(r => r.json())
+      .then(data => {
+        if (!data || !data.count) return;
+
+        // считаем хэш заголовков, чтобы не дублировать баннер
+        const hash = simpleHash((data.titles || []).join("|"));
+        if (localStorage.getItem(lastHashKey) === hash) return;
+
+        showNotificationBanner(data.message, data.titles, hash);
+      })
+      .catch(err => console.error("Ошибка уведомлений:", err));
+  }
+
+  function showNotificationBanner(message, titles, hash) {
+    // не более одного активного баннера
+    const existing = document.querySelector(".notification-banner");
+    if (existing) existing.remove();
+
+    const banner = document.createElement("div");
+    banner.classList.add("notification-banner");
+    banner.innerHTML = `
+      <div class="d-flex justify-content-between align-items-start p-3">
+        <div class="me-3">
+          <h6 class="mb-2 text-info"><i class="bi bi-bell-fill"></i> ${message}</h6>
+          <ul class="mb-2 small text-light">
+            ${(titles || []).map(t => `<li>${escapeHtml(t)}</li>`).join("")}
+          </ul>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-info" id="notifyOpenTasks">
+              Открыть задачи
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="notifySnooze">
+              Не беспокоить до завтра
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-outline-info btn-sm" id="notifyClose">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    `;
+    document.body.appendChild(banner);
+
+    document.getElementById("notifyClose").addEventListener("click", () => banner.remove());
+    document.getElementById("notifyOpenTasks").addEventListener("click", () => {
+      window.location.href = "/activities"; // при желании можно перейти сразу на фильтр «мои + open»
+    });
+    document.getElementById("notifySnooze").addEventListener("click", () => {
+      localStorage.setItem(todayKey(), "1"); // не показывать больше сегодня
+      banner.remove();
+    });
+
+    // помечаем последний показанный набор задач
+    if (hash) localStorage.setItem(lastHashKey, hash);
+  }
+
+  // простой hash строки, чтобы отличать набор задач
+  function simpleHash(s) {
+    let h = 0, i, chr;
+    if (s.length === 0) return "0";
+    for (i = 0; i < s.length; i++) {
+      chr = s.charCodeAt(i);
+      h = ((h << 5) - h) + chr;
+      h |= 0;
+    }
+    return String(h);
+  }
+
+  // экранирование для безопасности
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+});
+
+document.addEventListener("DOMContentLoaded", function() {
+  if (!("Notification" in window)) return;
+
+  const DIRECT_STORAGE_KEY = "chat_last_direct_incoming_id";
+  const GENERAL_STORAGE_KEY = "chat_last_general_incoming_id";
+  const PERMISSION_KEY = "chat_notification_permission_requested";
+  const enableBtn = document.getElementById("enableNotificationsBtn");
+  let permissionRequested = localStorage.getItem(PERMISSION_KEY) === "1";
+
+  function updateNotificationButton() {
+    if (!enableBtn) return;
+    if (!window.isSecureContext) {
+      enableBtn.classList.remove("d-none");
+      enableBtn.innerHTML = '<i class="bi bi-bell-slash"></i> Нужен HTTPS';
+      enableBtn.disabled = true;
+      return;
+    }
+    if (Notification.permission === "granted") {
+      enableBtn.classList.add("d-none");
+      return;
+    }
+    enableBtn.classList.remove("d-none");
+    if (Notification.permission === "denied") {
+      enableBtn.innerHTML = '<i class="bi bi-bell-slash"></i> Уведомления заблокированы';
+      enableBtn.disabled = true;
+      return;
+    }
+    enableBtn.innerHTML = '<i class="bi bi-bell"></i> Включить уведомления';
+    enableBtn.disabled = false;
+  }
+
+  function getLastIncomingId(key) {
+    return parseInt(localStorage.getItem(key) || "0", 10) || 0;
+  }
+
+  function setLastIncomingId(key, value) {
+    localStorage.setItem(key, String(value || 0));
+  }
+
+  async function ensurePermission() {
+    if (Notification.permission === "granted" || Notification.permission === "denied") {
+      updateNotificationButton();
+      return Notification.permission;
+    }
+    if (permissionRequested) {
+      updateNotificationButton();
+      return Notification.permission;
+    }
+    permissionRequested = true;
+    localStorage.setItem(PERMISSION_KEY, "1");
+    try {
+      const permission = await Notification.requestPermission();
+      updateNotificationButton();
+      return permission;
+    } catch (error) {
+      console.error("Не удалось запросить разрешение на уведомления чата:", error);
+      updateNotificationButton();
+      return Notification.permission;
+    }
+  }
+
+  function showChatNotification(message) {
+    if (Notification.permission !== "granted") return;
+
+    const cleanText = String(message.text || "").replace(/<[^>]*>/g, "").trim();
+    const body = cleanText ? cleanText.slice(0, 160) : "Новое сообщение в чате";
+    const title = message.kind === "general"
+      ? `Общий чат: ${message.sender}`
+      : `Личное сообщение от ${message.sender}`;
+    const notification = new Notification(title, {
+      body,
+      tag: `chat-message-${message.id}`
+    });
+
+    notification.onclick = function() {
+      window.focus();
+      if (message.kind === "general") {
+        window.location.href = "/chat?user_id=all";
+      } else {
+        window.location.href = `/chat?user_id=${message.sender_id}`;
+      }
+      notification.close();
+    };
+  }
+
+  async function pollIncomingChatMessages(showNotifications) {
+    try {
+      const directAfterId = getLastIncomingId(DIRECT_STORAGE_KEY);
+      const generalAfterId = getLastIncomingId(GENERAL_STORAGE_KEY);
+      const response = await fetch(`/api/chat/incoming?direct_after_id=${directAfterId}&general_after_id=${generalAfterId}`);
+      const data = await response.json();
+      const directMessages = Array.isArray(data.direct_messages) ? data.direct_messages : [];
+      const generalMessages = Array.isArray(data.general_messages) ? data.general_messages : [];
+
+      if (directMessages.length) {
+        setLastIncomingId(DIRECT_STORAGE_KEY, data.direct_last_id || directMessages[directMessages.length - 1].id);
+      }
+      if (generalMessages.length) {
+        setLastIncomingId(GENERAL_STORAGE_KEY, data.general_last_id || generalMessages[generalMessages.length - 1].id);
+      }
+
+      if (!showNotifications || Notification.permission !== "granted") return;
+      [...directMessages, ...generalMessages].forEach(showChatNotification);
+    } catch (error) {
+      console.error("Ошибка проверки новых сообщений чата:", error);
+    }
+  }
+
+  ensurePermission().finally(() => {
+    updateNotificationButton();
+    pollIncomingChatMessages(false);
+    setInterval(() => pollIncomingChatMessages(true), 10000);
+  });
+
+  if (enableBtn) {
+    updateNotificationButton();
+    enableBtn.addEventListener("click", async function() {
+      permissionRequested = true;
+      localStorage.setItem(PERMISSION_KEY, "1");
+      const permission = await Notification.requestPermission();
+      updateNotificationButton();
+      if (permission === "granted") {
+        pollIncomingChatMessages(false);
+      }
+    });
+  }
+});
+
+  (function () {
+    const bell = document.getElementById('notificationsBell');
+    if (!bell) return;
+
+    const badge = document.getElementById('notificationsBadge');
+    const list = document.getElementById('notificationsDropdownList');
+    const toastContainer = document.getElementById('userNotificationToastContainer');
+    const seenKey = 'user_notification_toast_ids';
+    let seenIds = new Set(JSON.parse(sessionStorage.getItem(seenKey) || '[]'));
+
+    function saveSeenIds() {
+      sessionStorage.setItem(seenKey, JSON.stringify(Array.from(seenIds).slice(-100)));
+    }
+
+    function setText(element, value) {
+      element.textContent = String(value || '');
+    }
+
+    function showToast(item) {
+      const toast = document.createElement('div');
+      toast.className = 'toast border-info text-bg-dark';
+      toast.setAttribute('role', 'alert');
+      toast.innerHTML = '<div class="toast-header bg-dark text-info border-info"><i class="bi bi-bell-fill me-2"></i><strong class="me-auto"></strong><button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button></div><div class="toast-body"></div>';
+      setText(toast.querySelector('strong'), item.title);
+      setText(toast.querySelector('.toast-body'), item.message);
+      toastContainer.appendChild(toast);
+      toast.addEventListener('hidden.bs.toast', function () { toast.remove(); });
+      bootstrap.Toast.getOrCreateInstance(toast, { delay: 9000 }).show();
+    }
+
+    function renderNotifications(data) {
+      const unreadCount = Number(data.unread_count || 0);
+      badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+      badge.classList.toggle('d-none', unreadCount === 0);
+      list.innerHTML = '';
+
+      if (!data.items || !data.items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'list-group-item bg-transparent text-muted';
+        empty.textContent = 'Новых уведомлений нет.';
+        list.appendChild(empty);
+        return;
+      }
+
+      data.items.forEach(function (item) {
+        const link = document.createElement('a');
+        link.href = '/notifications';
+        link.className = 'list-group-item list-group-item-action bg-transparent text-light';
+        if (!item.is_read) link.classList.add('border-start', 'border-info', 'border-3');
+        const title = document.createElement('strong');
+        const message = document.createElement('div');
+        const created = document.createElement('small');
+        message.className = 'd-block text-wrap mt-1';
+        created.className = 'd-block text-muted mt-1';
+        setText(title, item.title);
+        setText(message, item.message.length > 130 ? item.message.slice(0, 130) + '...' : item.message);
+        setText(created, item.created_at);
+        link.append(title, message, created);
+        link.addEventListener('click', function () {
+          fetch('/api/user-notifications/' + item.id + '/read', { method: 'POST' });
+        });
+        list.appendChild(link);
+      });
+    }
+
+    async function checkUserNotifications() {
+      try {
+        const response = await fetch('/api/user-notifications');
+        if (!response.ok) return;
+        const data = await response.json();
+        renderNotifications(data);
+        (data.items || []).filter(function (item) {
+          return !item.is_read && !seenIds.has(item.id);
+        }).slice(0, 3).forEach(function (item) {
+          seenIds.add(item.id);
+          showToast(item);
+        });
+        saveSeenIds();
+      } catch (error) {
+        console.error('Ошибка проверки пользовательских уведомлений:', error);
+      }
+    }
+
+    checkUserNotifications();
+    setInterval(checkUserNotifications, 30000);
+  })();
+
+  document.addEventListener('show.bs.modal', function (e) {
+  document.body.appendChild(e.target);
+});
+</script>
+
 </body>
 </html>

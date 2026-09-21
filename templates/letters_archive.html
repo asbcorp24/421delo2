@@ -1,0 +1,45 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+  <div>
+    <h3 class="mb-0">Архив писем</h3>
+    <div class="text-muted">Архивные письма не отображаются в основном журнале.</div>
+  </div>
+  <a href="{{ url_for('letters_page') }}" class="btn btn-secondary">К журналу</a>
+</div>
+
+<table class="table table-striped align-middle shadow-sm">
+  <thead class="table-dark">
+    <tr>
+      <th>№</th>
+      <th>Дата</th>
+      <th>Предприятие</th>
+      <th>Краткое содержание</th>
+      <th>Исполнитель</th>
+      <th>Дата архивации</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for le in letters %}
+    {% set executor_name = le.executor.full_name if le.executor else ((le.recipients | selectattr('role', 'equalto', 'executor') | map(attribute='user.full_name') | list | first) or '-') %}
+    <tr>
+      <td>{{ le.reg_number or le.id }}</td>
+      <td>{{ (le.letter_date or le.created_at).strftime('%d.%m.%Y') if (le.letter_date or le.created_at) else '-' }}</td>
+      <td>{{ le.source.name if le.source else '-' }}</td>
+      <td>{{ le.subject or '-' }}</td>
+      <td>{{ executor_name }}</td>
+      <td>{{ le.archived_at.strftime('%d.%m.%Y %H:%M') if le.archived_at else '-' }}</td>
+      <td class="text-nowrap">
+        <a href="{{ url_for('letter_view', letter_id=le.id) }}" class="btn btn-sm btn-outline-primary">Открыть</a>
+        <form method="post" action="{{ url_for('restore_letter', letter_id=le.id) }}" class="d-inline">
+          <button class="btn btn-sm btn-outline-success">Восстановить</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-center text-muted">Архив писем пуст.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

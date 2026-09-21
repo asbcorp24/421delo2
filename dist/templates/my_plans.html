@@ -1,0 +1,70 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container mt-4">
+  <h3>👤 Мои планы</h3>
+  <p class="text-secondary">Здесь отображаются только те планы, где вы назначены исполнителем.</p>
+  <hr class="border-info">
+
+  {% if plans %}
+  <div class="table-responsive">
+    <table class="table table-bordered table-hover align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th>ID</th>
+          <th>Период</th>
+          <th>Описание</th>
+          <th>⏳ Осталось дней</th>
+          <th>📈 Прогресс выполнения</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in plans %}
+        <tr>
+          <td>{{ p.id }}</td>
+          <td>{{ p.start_date }} — {{ p.end_date }}</td>
+          <td style="max-width: 400px;">{{ p.text }}</td>
+          <td>
+            {% if p.days_left is not none %}
+              {% if p.days_left < 0 %}
+                <span class="text-danger">Просрочен на {{ p.days_left|abs }} дн.</span>
+              {% elif p.days_left == 0 %}
+                <span class="text-warning">Заканчивается сегодня</span>
+              {% else %}
+                {{ p.days_left }} дн.
+              {% endif %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td style="min-width:180px;">
+            <div class="progress" style="height:20px;">
+              <div class="progress-bar
+                  {% if p.progress == 100 %}bg-success
+                  {% elif p.progress >= 50 %}bg-info
+                  {% elif p.progress > 0 %}bg-warning text-dark
+                  {% else %}bg-secondary{% endif %}"
+                  role="progressbar"
+                  style="width: {{ p.progress }}%;"
+                  aria-valuenow="{{ p.progress }}" aria-valuemin="0" aria-valuemax="100">
+                  {{ p.progress }}%
+              </div>
+            </div>
+          </td>
+          <td>
+            <a href="{{ url_for('plan_activities', plan_id=p.id) }}" class="btn btn-sm btn-outline-info">
+              📋 Задачи
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-info mt-4">
+    У вас пока нет назначенных планов.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

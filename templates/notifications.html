@@ -1,0 +1,25 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Уведомления</h3>
+  {% if current_user.role in ['admin', 'superadmin', 'deputy'] %}
+  <a href="{{ url_for('send_user_notification') }}" class="btn btn-primary">Отправить уведомление</a>
+  {% endif %}
+</div>
+
+<div class="list-group">
+  {% for item in notifications_list %}
+  <div class="list-group-item {% if not item.read_at %}border-info{% endif %}">
+    <div class="d-flex justify-content-between gap-3">
+      <div>
+        <strong>{{ item.title }}</strong>
+        <div class="mt-1" style="white-space: pre-wrap;">{{ item.message }}</div>
+      </div>
+      <small class="text-muted text-nowrap">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</small>
+    </div>
+  </div>
+  {% else %}
+  <div class="list-group-item text-muted">Уведомлений пока нет.</div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container py-4">
+  <h4>🔒 Управление доступом к файлу</h4>
+  <p><strong>{{ doc.filename }}</strong></p>
+  <form id="grantForm" class="d-flex gap-2 mb-4">
+    <select name="user_id" id="userSelect" class="form-select w-50">
+      <option value="">-- Выберите пользователя --</option>
+      {% for u in users %}
+        <option value="{{ u.id }}">{{ u.full_name }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-primary">Выдать доступ</button>
+  </form>
+
+  <ul id="accessList" class="list-group">
+    {% for a in access_list %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        {{ a.full_name }}
+        <button class="btn btn-sm btn-outline-danger revoke" data-id="{{ a.user_id }}">🗑 Удалить</button>
+      </li>
+    {% else %}
+      <li class="list-group-item text-muted">Доступов нет</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<script>
+document.getElementById("grantForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const user_id = form.user_id.value;
+  if (!user_id) return alert("Выберите пользователя");
+
+  const resp = await fetch(`/files/{{ doc.id }}/grant-access`, {
+    method: "POST",
+    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    body: new URLSearchParams({user_id})
+  });
+  const data = await resp.json();
+  if (data.success) location.reload();
+  else alert(data.error || "Ошибка");
+});
+
+document.querySelectorAll(".revoke").forEach(btn => {
+  btn.addEventListener("click", async () => {
+    const user_id = btn.dataset.id;
+    const resp = await fetch(`/files/{{ doc.id }}/revoke-access`, {
+      method: "POST",
+      headers: {"Content-Type": "application/x-www-form-urlencoded"},
+      body: new URLSearchParams({user_id})
+    });
+    const data = await resp.json();
+    if (data.success) location.reload();
+    else alert(data.error || "Ошибка");
+  });
+});
+</script>
+{% endblock %}

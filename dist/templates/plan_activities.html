@@ -1,0 +1,103 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container mt-4">
+  <h3>📋 Активности по плану №{{ plan.id }}</h3>
+  <p><b>Период:</b> {{ plan.start_date }} — {{ plan.end_date }}</p>
+  <p><b>Описание плана:</b> {{ plan.plan_text }}</p>
+
+  <div class="d-flex justify-content-between align-items-center mb-3 mt-4">
+    <a href="{{ url_for('plans_list') }}" class="btn btn-secondary">← К списку планов</a>
+    <a href="{{ url_for('plan_executors', plan_id=plan.id) }}" class="btn btn-primary">
+      👥 Исполнители
+    </a>
+  </div>
+
+  <table class="table table-bordered table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>ID</th>
+        <th>Название</th>
+        <th>Исполнитель</th>
+        <th>Период</th>
+        <th>⏳ Осталось дней</th>
+        <th>✅ Прогресс выполнения</th>
+        <th>Статус</th>
+        <th>Действие</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in activities %}
+{% set days_left = (a.end_date.date() - now().date()).days if a.end_date else None %}
+
+      {% set total_logs = a.logs | length %}
+      {% set done_logs = a.logs | selectattr('is_done') | list | length %}
+      {% set percent = (done_logs * 100 // total_logs) if total_logs > 0 else 0 %}
+      <tr class="{% if a.status == 'done' %}table-success{% elif a.status == 'rejected' %}table-danger{% elif a.status == 'approved' %}table-info{% endif %}">
+        <td>{{ a.id }}</td>
+        <td>{{ a.title }}</td>
+        <td>{{ a.owner.full_name if a.owner else '—' }}</td>
+        <td>
+          {{ a.start_date.strftime('%Y-%m-%d') if a.start_date else '' }}
+          —
+          {{ a.end_date.strftime('%Y-%m-%d') if a.end_date else '' }}
+        </td>
+        <td>
+          {% if days_left is not none %}
+            {% if days_left < 0 %}
+              <span class="text-danger">Просрочено на {{ days_left|abs }} дн.</span>
+            {% elif days_left == 0 %}
+              <span class="text-warning">Заканчивается сегодня</span>
+            {% else %}
+              {{ days_left }} дн.
+            {% endif %}
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td style="min-width:180px;">
+          {% if total_logs > 0 %}
+            <div class="progress" style="height: 20px;">
+              <div class="progress-bar
+                {% if percent == 100 %}bg-success
+                {% elif percent >= 50 %}bg-info
+                {% elif percent > 0 %}bg-warning text-dark
+                {% else %}bg-secondary{% endif %}"
+                role="progressbar"
+                style="width: {{ percent }}%;"
+                aria-valuenow="{{ percent }}" aria-valuemin="0" aria-valuemax="100">
+                {{ percent }}%
+              </div>
+            </div>
+            <small class="text-muted">{{ done_logs }}/{{ total_logs }} действий</small>
+          {% else %}
+            <span class="text-muted">нет действий</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if a.status == 'open' %}
+            <span class="badge bg-secondary">В работе</span>
+          {% elif a.status == 'done' %}
+            <span class="badge bg-success">Завершена</span>
+          {% elif a.status == 'approved' %}
+            <span class="badge bg-info text-dark">Утверждена</span>
+          {% elif a.status == 'rejected' %}
+            <span class="badge bg-danger">Отклонена</span>
+          {% else %}
+            <span class="badge bg-light text-dark">{{ a.status }}</span>
+          {% endif %}
+        </td>
+        <td>
+          <a href="{{ url_for('activity_view', activity_id=a.id) }}" class="btn btn-sm btn-outline-primary">
+            🔍 Открыть
+          </a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="8" class="text-center text-muted">Пока нет активностей по этому плану</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

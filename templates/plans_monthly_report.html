@@ -1,0 +1,304 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container mt-4 report-sheet">
+  <div class="print-header">
+    <div class="print-requisites"><div>Организация: ______________________________</div><div>УТВЕРЖДАЮ<br>________________ /____________/<br>«___» __________ 20__ г.</div></div>
+    <h1>СВОДНЫЙ ОТЧЕТ ПО ВЫПОЛНЕНИЮ ПЛАНОВ</h1>
+    <div>за {{ period_start.strftime('%B %Y') }}</div>
+    <div class="mt-1">Период: {{ period_start.strftime('%d.%m.%Y') }} - {{ period_end.strftime('%d.%m.%Y') }}</div>
+  </div>
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+    <div>
+      <h3 class="mb-1">Сводный отчет по планам</h3>
+      <div class="text-muted">Период: {{ period_start.strftime('%d.%m.%Y') }} - {{ period_end.strftime('%d.%m.%Y') }}</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('plans_list') }}" class="btn btn-outline-info">К планам</a>
+      <button type="button" class="btn btn-outline-light" onclick="window.print()">Печать</button>
+    </div>
+  </div>
+
+  <form method="get" class="card bg-dark border-info shadow-sm mb-4">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label text-info">Месяц</label>
+          <input type="month" name="month" value="{{ month_value }}" class="form-control">
+        </div>
+        <div class="col-md-auto">
+          <button type="submit" class="btn btn-primary">Сформировать</button>
+          <a href="{{ url_for('plans_monthly_report') }}" class="btn btn-secondary">Сброс</a>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <div class="row g-3 mb-4 report-summary">
+    <div class="col-md-3">
+      <div class="card bg-dark border-info h-100">
+        <div class="card-body">
+          <div class="text-info small text-uppercase">Планов</div>
+          <div class="fs-3 fw-bold text-light">{{ summary.plans_count }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark border-success h-100">
+        <div class="card-body">
+          <div class="text-success small text-uppercase">Всего пунктов</div>
+          <div class="fs-3 fw-bold text-light">{{ summary.items_total }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark border-warning h-100">
+        <div class="card-body">
+          <div class="text-warning small text-uppercase">Отделов / исполнителей</div>
+          <div class="fs-3 fw-bold text-light">{{ summary.departments_count }} / {{ summary.executors_count }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark border-primary h-100">
+        <div class="card-body">
+          <div class="text-primary small text-uppercase">Выполнение</div>
+          <div class="fs-3 fw-bold text-light">{{ summary.completion_percent }}%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-dark border-info shadow-sm mb-4 report-summary">
+    <div class="card-body">
+      <div class="row g-3 text-center">
+        <div class="col-md-3">
+          <div class="border border-success rounded-3 p-3 h-100">
+            <div class="text-success">Выполнено</div>
+            <div class="fs-4 fw-semibold text-light">{{ summary.done_count }}</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="border border-warning rounded-3 p-3 h-100">
+          <div class="text-warning">Запланировано</div>
+          <div class="fs-4 fw-semibold text-light">{{ summary.planned_count }}</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="border border-danger rounded-3 p-3 h-100">
+          <div class="text-danger">Невыполнено</div>
+          <div class="fs-4 fw-semibold text-light">{{ summary.not_done_count }}</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="border border-secondary rounded-3 p-3 h-100">
+          <div class="text-secondary">Отменено</div>
+          <div class="fs-4 fw-semibold text-light">{{ summary.cancelled_count }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-dark border-info shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Отдел / исполнитель</th>
+              <th>№</th>
+              <th>Мероприятие</th>
+              <th>Связанная задача</th>
+              <th>Срок выполнения</th>
+              <th>Результат</th>
+              <th>Комментарий</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for department in department_rows %}
+              <tr class="table-info department-row"><td colspan="7" class="fw-bold text-dark">{{ department.name }} · всего: {{ department.total }} · выполнено: {{ department.done }} · невыполнено: {{ department.not_done }} · {{ department.completion }}%</td></tr>
+              {% for group in department.executors %}
+                {% for item in group["items"] %}
+                <tr>
+                  {% if loop.first %}<td rowspan="{{ group["items"]|length }}" class="fw-semibold">{{ group.user.full_name }}</td>{% endif %}
+                  <td>{{ item.position }}</td>
+                  <td style="min-width: 320px;">{{ item.task_text }}</td>
+                  <td style="min-width: 190px;">{% if item.linked_activity %}<a href="{{ url_for('activity_view', activity_id=item.linked_activity.id) }}">#{{ item.linked_activity.id }} {{ item.linked_activity.title }}</a>{% else %}-{% endif %}</td>
+                  <td>{% if item.deadline_kind == 'date' and item.deadline_date %}До {{ item.deadline_date.strftime('%d.%m.%Y') }}{% else %}{{ deadline_options.get(item.deadline_kind, item.deadline_kind) }}{% endif %}</td>
+                  {% set meta = get_plan_status_meta(item.status) %}<td><span class="badge {{ meta.class }}">{{ meta.label }}</span></td>
+                  <td style="min-width: 220px;">{{ item.comment or '-' }}</td>
+                </tr>
+                {% endfor %}
+              {% endfor %}
+            {% else %}
+            <tr>
+              <td colspan="7" class="text-center text-muted py-4">За выбранный месяц пункты планов не найдены.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="print-signature">Ответственный за составление отчёта: __________________ /____________/ &nbsp;&nbsp;&nbsp; Дата: {{ now().strftime('%d.%m.%Y') }}</div>
+</div>
+
+<style>
+.print-header, .print-signature { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 12mm 10mm; }
+  nav, footer, .btn, form, .alert, .navbar, .screen-only {
+    display: none !important;
+  }
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+    font-family: "Times New Roman", serif !important;
+    font-size: 10pt;
+  }
+  .container {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .print-header {
+    display: block !important;
+    text-align: center;
+    color: #000 !important;
+    margin: 0 0 7mm;
+  }
+  .print-header .print-org {
+    font-size: 9pt;
+    font-weight: bold;
+    letter-spacing: .8pt;
+    margin-bottom: 2mm;
+  }
+  .print-requisites { display: flex; justify-content: space-between; text-align: left; font-size: 9pt; margin-bottom: 8mm; }
+  .print-header h1 {
+    font-size: 16pt;
+    margin: 0 0 2mm;
+    font-weight: bold;
+  }
+  .card {
+    background: #fff !important;
+    color: #000 !important;
+    border: 1px solid #000 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  .card-body, .card-header, .border, .rounded-3 {
+    background: #fff !important;
+    color: #000 !important;
+    border-color: #000 !important;
+  }
+  .report-summary .row {
+    --bs-gutter-x: 0 !important;
+    --bs-gutter-y: 0 !important;
+  }
+  .report-summary .col-md-3 {
+    width: 25% !important;
+    padding: 1.5mm !important;
+  }
+  .report-summary .border {
+    min-height: auto !important;
+    padding: 2mm !important;
+  }
+  .text-light, .text-info, .text-success, .text-warning, .text-danger, .text-secondary, .text-muted {
+    color: #000 !important;
+  }
+  .badge {
+    color: #000 !important;
+    background: transparent !important;
+    border: 1px solid #000 !important;
+    font-weight: normal;
+    padding: 1mm 1.5mm;
+  }
+  .table-responsive { overflow: visible !important; }
+  .table, .table-dark, .table-dark > :not(caption) > * > * {
+    --bs-table-bg: #fff !important;
+    --bs-table-color: #000 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 8.5pt;
+  }
+  .table th, .table td {
+    border: 1px solid #000 !important;
+    padding: 1.5mm 1.8mm !important;
+    vertical-align: top !important;
+  }
+  .table thead { display: table-header-group; }
+  .table thead th {
+    background: #e8e8e8 !important;
+    color: #000 !important;
+    text-align: center;
+    vertical-align: middle !important;
+  }
+  .table tr { break-inside: avoid; page-break-inside: avoid; }
+  .table .department-row td, .table-info > * > * {
+    background: #d9d9d9 !important;
+    color: #000 !important;
+  }
+  .table th:nth-child(1) { width: 17%; }
+  .table th:nth-child(2) { width: 4%; text-align: center; }
+  .table th:nth-child(3) { width: 27%; }
+  .table th:nth-child(4) { width: 18%; }
+  .table th:nth-child(5) { width: 12%; }
+  .table th:nth-child(6) { width: 10%; }
+  .table th:nth-child(7) { width: 12%; }
+  .fs-3, .fs-4 { font-size: 13pt !important; }
+  a { color: #000 !important; text-decoration: none !important; }
+  .report-sheet > .d-flex { margin-bottom: 3mm !important; }
+  .report-sheet > .d-flex > div:first-child h3,
+  .report-sheet > .d-flex > div:first-child .text-muted { display: none !important; }
+  .report-sheet > .d-flex > div:last-child { display: none !important; }
+  .report-summary { margin-bottom: 4mm !important; }
+  .report-summary .card-body { padding: 2mm !important; }
+  .report-summary .fs-3, .report-summary .fs-4 { line-height: 1.1; }
+  .progress { border: 1px solid #000; }
+  .progress-bar { background: #777 !important; }
+  .table-dark.table-hover > tbody > tr:hover > * { color: #000 !important; }
+  .card.bg-dark { background: #fff !important; }
+  .shadow-sm { box-shadow: none !important; }
+  .mb-4 { margin-bottom: 4mm !important; }
+  .mb-3 { margin-bottom: 3mm !important; }
+  .py-4 { padding-top: 4mm !important; padding-bottom: 4mm !important; }
+  .text-uppercase { text-transform: uppercase; }
+  .table td[style*="min-width"] { min-width: 0 !important; }
+  .table td { overflow-wrap: anywhere; }
+  .table td:first-child { vertical-align: middle !important; }
+  .table tbody { break-inside: auto; }
+  .table .department-row { break-after: avoid; page-break-after: avoid; }
+  .table .department-row + tr { break-before: avoid; page-break-before: avoid; }
+  .print-signature { display: block !important; color: #000 !important; margin-top: 8mm; font-size: 10pt; }
+  .table thead + tbody { break-before: avoid; }
+  .report-sheet { min-height: auto !important; }
+  .card:last-child { margin-bottom: 0 !important; }
+  .table > :not(caption) > * > * { box-shadow: none !important; }
+  .table-info { --bs-table-bg: #d9d9d9 !important; }
+  .table-info td { background: #d9d9d9 !important; }
+  .report-summary .card { border: 1px solid #000 !important; }
+  .report-summary .card-body > .row > div { border: 0 !important; }
+  .report-summary .card-body > .row > div:not(:last-child) { border-right: 1px solid #000 !important; }
+  .report-summary .border { border: 0 !important; }
+  .report-summary .rounded-3 { border-radius: 0 !important; }
+  .report-summary .h-100 { height: auto !important; }
+  .report-summary .p-3 { padding: 2mm !important; }
+  .report-summary .display-6 { font-size: 15pt !important; }
+  .report-summary .small { font-size: 8pt !important; }
+  .report-summary .fs-3 { font-size: 15pt !important; }
+  .report-summary .fs-4 { font-size: 13pt !important; }
+  .report-summary .text-center { text-align: center !important; }
+  .report-summary .row > * { flex: 0 0 auto !important; }
+  .report-summary .col-md-3 { display: block !important; }
+  .report-summary .card-body { display: block !important; }
+  .report-summary .row { display: flex !important; }
+  .report-summary .col-md-3 { flex: 0 0 25% !important; }
+  .report-summary .border-success, .report-summary .border-warning, .report-summary .border-danger, .report-summary .border-secondary { border-color: #000 !important; }
+}
+</style>
+{% endblock %}

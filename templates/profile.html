@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container py-4">
+  <h3>👤 Личный кабинет</h3>
+  <hr>
+
+  <div class="row">
+    <div class="col-md-6">
+      <h5>Мои данные</h5>
+      <table class="table table-sm table-borderless">
+        <tr><th>ФИО:</th><td>{{ user.full_name }}</td></tr>
+        <tr><th>Логин:</th><td>{{ user.username }}</td></tr>
+        <tr><th>Роль:</th><td>{{ user.role }}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <hr>
+  <div class="row">
+    <div class="col-md-6">
+      <h5>🔑 Смена пароля</h5>
+      <form method="post" action="{{ url_for('change_password') }}">
+        <div class="mb-3">
+          <label class="form-label">Текущий пароль</label>
+          <input type="password" class="form-control" name="old_password" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Новый пароль</label>
+          <input type="password" class="form-control" name="new_password" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Подтверждение нового пароля</label>
+          <input type="password" class="form-control" name="confirm_password" required>
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Изменить пароль</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

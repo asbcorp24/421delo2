@@ -1,0 +1,9 @@
+[Unit]
+Description=Create OTD421 database backup
+After=network.target
+
+[Service]
+Type=oneshot
+User=plan
+WorkingDirectory=/home/plan/otd421
+ExecStart=/home/plan/otd421/venv/bin/python /home/plan/otd421/backup_database.py

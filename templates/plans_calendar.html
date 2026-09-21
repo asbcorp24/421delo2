@@ -1,0 +1,77 @@
+{% extends 'layout.html' %}
+{% block content %}
+<style>
+  .deadline-calendar .fc { --fc-page-bg-color: #15181f; --fc-neutral-bg-color: #1b2029; --fc-border-color: #31404f; --fc-today-bg-color: rgba(13, 202, 240, .10); --fc-list-event-hover-bg-color: #202938; }
+  .deadline-calendar .fc-theme-standard td, .deadline-calendar .fc-theme-standard th { border-color: #31404f; }
+  .deadline-calendar .fc-col-header-cell-cushion { color: #d9edf6 !important; text-decoration: none; padding: 7px; }
+  .deadline-calendar .fc .fc-daygrid-day-number { color: #ffffff !important; font-weight: 700; font-size: .95rem; opacity: 1; text-decoration: none; padding: 7px; }
+  .deadline-calendar .fc .fc-day-other .fc-daygrid-day-number { color: #8fa6b3 !important; }
+  .deadline-calendar .fc .fc-daygrid-day-frame { min-height: 96px; background: rgba(19, 27, 37, .72); }
+  .deadline-calendar .fc .fc-daygrid-day-top { background: rgba(38, 57, 75, .48); }
+  .deadline-calendar .fc-toolbar-title { color: #10283b !important; font-size: 1.3rem; font-weight: 800; text-shadow: none !important; }
+  .deadline-calendar .fc-button { background: #202b3a; border-color: #3a566d; }
+  .deadline-calendar .fc-button:hover, .deadline-calendar .fc-button-active { background: #087ea4 !important; border-color: #13c8f2 !important; }
+  .deadline-calendar .fc-event { border: 0; border-radius: 5px; padding: 2px 5px; font-size: .78rem; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .deadline-legend { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; }
+  .deadline-legend .form-check { margin: 0; }
+</style>
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+  <div>
+    <h3 class="mb-1">Календарь сроков</h3>
+    <div class="text-muted">Задачи, переносы, просрочки и контрольные даты планов на одной странице.</div>
+  </div>
+  <a href="{{ url_for('activities_page') }}" class="btn btn-outline-info"><i class="bi bi-list-task"></i> Список задач</a>
+</div>
+
+<section class="card shadow-sm deadline-calendar">
+  <div class="card-body">
+    <div class="deadline-legend mb-3 pb-3 border-bottom">
+      <label class="form-check text-info"><input class="form-check-input me-1 calendar-kind" type="checkbox" value="task" checked> Срок задачи</label>
+      <label class="form-check text-warning"><input class="form-check-input me-1 calendar-kind" type="checkbox" value="postponed" checked> Перенос</label>
+      <label class="form-check text-danger"><input class="form-check-input me-1 calendar-kind" type="checkbox" value="overdue" checked> Просрочка</label>
+      <label class="form-check" style="color:#bb86fc"><input class="form-check-input me-1 calendar-kind" type="checkbox" value="plan" checked> План</label>
+    </div>
+    <div id="calendar"></div>
+  </div>
+</section>
+
+<script src="{{ url_for('static', filename='vendor/fullcalendar.index.global.min.js') }}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const calendarElement = document.getElementById("calendar");
+  const kindChecks = Array.from(document.querySelectorAll(".calendar-kind"));
+  const selectedKinds = function () {
+    return kindChecks.filter(function (item) { return item.checked; }).map(function (item) { return item.value; }).join(",");
+  };
+  const calendar = new FullCalendar.Calendar(calendarElement, {
+    initialView: "dayGridMonth",
+    locale: "ru",
+    firstDay: 1,
+    height: "auto",
+    displayEventTime: false,
+    fixedWeekCount: false,
+    buttonText: { today: "Сегодня", month: "Месяц", list: "Список" },
+    titleFormat: { year: "numeric", month: "long" },
+    headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,listMonth" },
+    events: function (info, success, failure) {
+      fetch("{{ url_for('activities_events') }}?kinds=" + encodeURIComponent(selectedKinds()))
+        .then(function (response) { if (!response.ok) throw new Error("Не удалось загрузить календарь"); return response.json(); })
+        .then(success)
+        .catch(failure);
+    },
+    eventClick: function (info) {
+      info.jsEvent.preventDefault();
+      if (info.event.url) window.location.assign(info.event.url);
+    },
+    eventDidMount: function (info) {
+      const props = info.event.extendedProps;
+      info.el.title = [info.event.title, props.owner ? "Ответственный: " + props.owner : "", props.deadline || "", props.status ? "Статус: " + props.status : ""].filter(Boolean).join("\n");
+    },
+    noEventsContent: "На выбранный месяц сроков нет"
+  });
+  kindChecks.forEach(function (item) { item.addEventListener("change", function () { calendar.refetchEvents(); }); });
+  calendar.render();
+});
+</script>
+{% endblock %}

@@ -1,32 +1,57 @@
 {% extends 'layout.html' %}
 {% block content %}
-<h3>Создание активности на основе письма №{{ le.id }}</h3>
+<h3>Создание задачи на основе письма №{{ le.id }}</h3>
 
 <form method="post" class="card p-3 shadow-sm">
   <div class="mb-3">
-    <label class="form-label">Тип активности</label>
-    <select name="type_id" class="form-select">
-      <option value="">-- выберите тип --</option>
+    <label class="form-label">Тип задачи</label>
+    <select name="type_id" class="form-select" required>
+      <option value="" selected disabled>-- выберите тип --</option>
       {% for t in types %}
         <option value="{{ t.id }}">{{ t.name }}</option>
       {% endfor %}
     </select>
+    <div class="form-text">Обязательное поле.</div>
   </div>
 
   <div class="mb-3">
     <label class="form-label">Название</label>
-    <input type="text" name="title" class="form-control" required placeholder="Введите заголовок активности">
+    <input type="text" name="title" class="form-control" value="Ответ на письмо №{{ le.id }}" required>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Приоритет</label>
+    <select name="priority" class="form-select">
+      <option value="1">1 - низкий</option><option value="2">2 - обычный</option>
+      <option value="3" selected>3 - средний</option><option value="4">4 - высокий</option>
+      <option value="5">5 - критический</option>
+    </select>
   </div>
 
   <div class="mb-3">
     <label class="form-label">Описание</label>
-    <textarea name="description" class="form-control" rows="4" placeholder="Краткое описание задачи"></textarea>
+    <textarea name="description" class="form-control" rows="4" placeholder="Краткое описание задачи">{{ le.body[:300] if le.body else '' }}</textarea>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Тема</label>
+    <input list="directions" name="direction" class="form-control" placeholder="Выберите тематику или введите новую вручную">
+    <datalist id="directions">
+      {% for d in existing_directions %}
+        <option value="{{ d }}"></option>
+      {% endfor %}
+    </datalist>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Исходный документ</label>
+    <input type="text" name="outgoing_document" class="form-control" value="Письмо №{{ le.id }}: {{ le.subject }}">
   </div>
 
   <div class="row mb-3">
     <div class="col">
       <label class="form-label">Дата начала</label>
-      <input type="date" name="start_date" class="form-control">
+      <input type="date" name="start_date" class="form-control" value="{{ now().strftime('%Y-%m-%d') }}">
     </div>
     <div class="col">
       <label class="form-label">Дата окончания</label>
@@ -34,7 +59,7 @@
     </div>
   </div>
 
-  <button class="btn btn-success">💾 Создать активность</button>
+  <button class="btn btn-success">Создать задачу</button>
   <a href="{{ url_for('letter_view', letter_id=le.id) }}" class="btn btn-secondary">Отмена</a>
 </form>
 {% endblock %}

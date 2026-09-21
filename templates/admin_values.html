@@ -1,0 +1,63 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3 class="mb-3">Шаблоны значений</h3>
+
+<form method="post" action="{{ url_for('admin_values_create') }}" class="card p-3 mb-4 shadow-sm">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label">Системное имя (name)</label>
+      <input name="name" class="form-control" required placeholder="temp"/>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Заголовок (rusname)</label>
+      <input name="rusname" class="form-control" required placeholder="Температура"/>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Тип</label>
+      <select name="type" class="form-select">
+        <option value="string">string</option>
+        <option value="text">text</option>
+        <option value="int">int</option>
+        <option value="float">float</option>
+        <option value="bool">bool</option>
+        <option value="date">date</option>
+      </select>
+    </div>
+    <div class="col-md-2 text-end">
+      <button class="btn btn-success w-100">➕ Добавить</button>
+    </div>
+  </div>
+</form>
+
+<table class="table table-striped shadow-sm align-middle">
+  <thead class="table-dark">
+    <tr>
+      <th>ID</th><th>name</th><th>rusname</th><th>type</th><th>Активен</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for v in values %}
+    <tr>
+      <td>{{ v.id }}</td>
+      <td>{{ v.name }}</td>
+      <td>{{ v.rusname }}</td>
+      <td>{{ v.type }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin_values_toggle', vid=v.id) }}" class="d-inline">
+          <button class="btn btn-sm {{ 'btn-success' if v.is_active else 'btn-secondary' }}">
+            {{ 'ON' if v.is_active else 'OFF' }}
+          </button>
+        </form>
+      </td>
+      <td class="text-end">
+        <form method="post" action="{{ url_for('admin_values_delete', vid=v.id) }}" onsubmit="return confirm('Удалить?');" class="d-inline">
+          <button class="btn btn-sm btn-outline-danger">Удалить</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="text-muted">Пока пусто</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

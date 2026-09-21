@@ -1,0 +1,111 @@
+{% extends 'layout.html' %}
+{% block content %}
+<style>
+  .help-hero { background: linear-gradient(115deg, rgba(0,224,255,.14), rgba(14,25,38,.62)); border: 1px solid rgba(0,224,255,.24); border-radius: 16px; }
+  .help-hero p { color: #d7e7ee !important; }
+  .help-nav { position: sticky; top: 16px; }
+  .help-nav .nav-link { color: #cfefff !important; border: 1px solid transparent; text-align: left; }
+  .help-nav .nav-link.active { background: rgba(0,224,255,.13); border-color: rgba(0,224,255,.32); color: #00e0ff !important; }
+  .help-card { height: 100%; border: 1px solid rgba(0,224,255,.15); background: rgba(4,17,27,.72); color: #edf8fc; }
+  .help-card h5 { color: #00e0ff; }
+  .help-card li, .help-card strong, .help-card td { color: #edf8fc; margin-bottom: .45rem; }
+  .help-card .text-muted, .help-card p.text-muted, .text-muted { color: #a9c3ce !important; }
+  #statuses .table { color: #edf8fc; }
+  #statuses .table td, #statuses .table th { border-color: rgba(161, 224, 235, .35); }
+  .help-step { display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center; border-radius: 50%; background: #00cfe8; color: #051018; font-weight: 700; margin-right: .4rem; }
+  .help-note { border-left: 3px solid #ffc107; background: rgba(255,193,7,.08); }
+  @media (max-width: 767px) { .help-nav { position: static; } }
+</style>
+
+<section class="help-hero p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <div class="text-uppercase small text-info mb-1">Документооборот</div>
+      <h2 class="mb-2">Справка по работе в системе</h2>
+      <p class="mb-0 text-light-emphasis">Выберите свой раздел: обычный пользователь работает со своими задачами и планом, заместитель дополнительно координирует и перенаправляет задачи.</p>
+    </div>
+    <span class="badge text-bg-info fs-6">Ваша роль: {{ current_user.role }}</span>
+  </div>
+</section>
+
+<div class="row g-4">
+  <aside class="col-lg-3">
+    <nav class="help-nav nav nav-pills flex-column gap-1" aria-label="Разделы справки">
+      <a class="nav-link active" href="#start">Начало работы</a>
+      <a class="nav-link" href="#user">Пользователь</a>
+      <a class="nav-link" href="#statuses">Статусы задач</a>
+      <a class="nav-link" href="#deputy">Заместитель</a>
+      <a class="nav-link" href="#plans">Планы и отчеты</a>
+      <a class="nav-link" href="#documents">Документы и общение</a>
+      <a class="nav-link" href="#rules">Важные правила</a>
+    </nav>
+  </aside>
+
+  <main class="col-lg-9">
+    <section id="start" class="mb-5">
+      <h3>Начало работы</h3>
+      <div class="card help-card shadow-sm"><div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4"><span class="help-step">1</span><strong>Откройте «Главная»</strong><p class="small text-muted mt-2 mb-0">Здесь показаны ваши задачи, сроки и уведомления.</p></div>
+          <div class="col-md-4"><span class="help-step">2</span><strong>Откройте задачу</strong><p class="small text-muted mt-2 mb-0">Нажмите «Открыть» в списке задач или на главной странице.</p></div>
+          <div class="col-md-4"><span class="help-step">3</span><strong>Зафиксируйте результат</strong><p class="small text-muted mt-2 mb-0">В журнале действий укажите ход работы, затем смените статус.</p></div>
+        </div>
+      </div></div>
+    </section>
+
+    <section id="user" class="mb-5">
+      <h3>Для пользователя</h3>
+      <div class="row g-3">
+        <div class="col-md-6"><article class="card help-card shadow-sm"><div class="card-body"><h5>Задачи</h5><ul class="mb-0"><li>В «Задачах» используйте период, поиск и фильтр статуса.</li><li>Откройте свою задачу, чтобы увидеть срок, ответственного, источник и историю изменений.</li><li>До финального статуса добавляйте записи в журнал действий и прикладывайте документы.</li><li>Менять можно только доступные вам задачи: свои или направленные в ваш отдел.</li></ul></div></article></div>
+        <div class="col-md-6"><article class="card help-card shadow-sm"><div class="card-body"><h5>Как закрыть задачу</h5><ul class="mb-0"><li>В блоке «Смена статуса» выберите итог.</li><li>Для «Не выполнено» обязательно укажите причину.</li><li>Для «Перенос» укажите новую дату и причину.</li><li>После «Выполнено» или «Не выполнено» работа, документы и журнал блокируются. Обратиться к заместителю или администратору можно для корректировки.</li></ul></div></article></div>
+        <div class="col-md-6"><article class="card help-card shadow-sm"><div class="card-body"><h5>Письма и служебные записки</h5><ul class="mb-0"><li>В соответствующих журналах доступны поиск и фильтры.</li><li>Откройте документ, чтобы прочитать содержание, скачать вложения и перейти к связанным задачам.</li><li>В служебной записке видно состояние утверждения. Зелёный бейдж означает, что её утвердило руководство.</li></ul></div></article></div>
+        <div class="col-md-6"><article class="card help-card shadow-sm"><div class="card-body"><h5>Личный план</h5><ul class="mb-0"><li>В разделе «Планы и отчеты» создайте один план на выбранный месяц.</li><li>Добавьте строки плана, сроки и комментарии.</li><li>После отправки и утверждения план нельзя исправлять; по его строкам указывается только результат выполнения.</li><li>Когда результат принят, строка становится доступной только для чтения.</li></ul></div></article></div>
+      </div>
+    </section>
+
+    <section id="statuses" class="mb-5">
+      <h3>Статусы задач</h3>
+      <div class="table-responsive"><table class="table table-bordered align-middle mb-0"><thead><tr><th>Статус</th><th>Что означает</th><th>Что нужно указать</th></tr></thead><tbody>
+        <tr><td><span class="badge text-bg-warning">В работе</span></td><td>Задача выполняется.</td><td>При необходимости добавляйте действия и документы.</td></tr>
+        <tr><td><span class="badge text-bg-success">Выполнено</span></td><td>Работа завершена.</td><td>Комментарий необязателен, но рекомендуется для результата.</td></tr>
+        <tr><td><span class="badge text-bg-danger">Не выполнено</span></td><td>Задача не выполнена в срок или по иной причине.</td><td>Причина обязательна.</td></tr>
+        <tr><td><span class="badge" style="background:#fd7e14">Перенос</span></td><td>Срок нужно изменить.</td><td>Новая дата и причина обязательны.</td></tr>
+        <tr><td><span class="badge" style="background:#6f4e37">Отмена</span></td><td>Задача отменена.</td><td>Рекомендуется оставить комментарий.</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section id="deputy" class="mb-5">
+      <h3>Для заместителя</h3>
+      <div class="alert help-note text-light"><strong>Заместитель</strong> видит задачи сотрудников и может координировать их выполнение. Административные справочники, настройки, журналы писем и служебных записок ему недоступны для редактирования.</div>
+      <div class="row g-3">
+        <div class="col-md-6"><article class="card help-card shadow-sm"><div class="card-body"><h5>Перенаправление задачи</h5><ol class="mb-0"><li>Откройте задачу.</li><li>Используйте раздел перенаправления.</li><li>Выберите нового исполнителя или отдел.</li><li>Добавьте пояснение и сохраните действие.</li></ol><p class="small text-muted mt-3 mb-0">Система сохраняет факт перенаправления в истории задачи: кто, когда и кому её направил.</p></div></article></div>
+        <div class="col-md-6"><article class="card help-card shadow-sm"><div class="card-body"><h5>Контроль исполнения</h5><ul class="mb-0"><li>Фильтруйте задачи по сотруднику, периоду и статусу.</li><li>Проверяйте журнал действий, историю изменений и приложенные документы.</li><li>Можете изменить финальный статус, если требуется исправление.</li><li>Можете архивировать задачу и восстановить её из архива.</li><li>Можете направлять уведомления сотруднику, отделу или всем пользователям.</li></ul></div></article></div>
+      </div>
+    </section>
+
+    <section id="plans" class="mb-5">
+      <h3>Планы и отчеты</h3>
+      <div class="card help-card shadow-sm"><div class="card-body"><ul class="mb-0"><li>План создаётся на один месяц; у одного сотрудника может быть только один план за месяц.</li><li>Статусы плана: черновик, на утверждении, утвержден, возвращён на доработку.</li><li>Если руководитель возвращает план, исправьте его и отправьте на утверждение повторно.</li><li>В конце месяца по строкам плана укажите: выполнено, не выполнено или отменено, и добавьте комментарий.</li><li>Сводные отчеты, аналитика и печать доступны в разделе «Планы и отчеты» согласно вашей роли.</li></ul></div></div>
+    </section>
+
+    <section id="documents" class="mb-5">
+      <h3>Документы, поиск и общение</h3>
+      <div class="row g-3"><div class="col-md-6"><article class="card help-card shadow-sm"><div class="card-body"><h5>Поиск и файлы</h5><ul class="mb-0"><li>«Поиск документов» ищет по задачам, письмам и служебным запискам.</li><li>В «Общих документах» доступны опубликованные для сотрудников файлы.</li><li>Запрашивайте доступ к документу через карточку, если он закрыт.</li></ul></div></article></div><div class="col-md-6"><article class="card help-card shadow-sm"><div class="card-body"><h5>Чат и уведомления</h5><ul class="mb-0"><li>В «Чате» можно писать лично выбранному сотруднику или в общий чат.</li><li>Колокольчик в правом верхнем углу показывает новые уведомления.</li><li>Разрешите браузеру системные уведомления кнопкой «Уведомления», чтобы получать всплывающие сообщения.</li></ul></div></article></div></div>
+    </section>
+
+    <section id="rules">
+      <h3>Важные правила</h3>
+      <div class="card help-card shadow-sm"><div class="card-body"><ul class="mb-0"><li>Не передавайте пароль другим сотрудникам. У каждого должна быть собственная учётная запись.</li><li>Перед финальным статусом проверьте срок, результат и приложенные документы: после завершения задача блокируется для обычного пользователя.</li><li>Не удаляйте сведения из журнала действий без необходимости: он фиксирует фактический ход работы.</li><li>Если задача назначена ошибочно или требуется сменить исполнителя, обратитесь к заместителю или администратору.</li><li>При технической ошибке сделайте снимок экрана и сообщите администратору, указав адрес страницы и время ошибки.</li></ul></div></div>
+    </section>
+  </main>
+</div>
+
+<script>
+document.querySelectorAll('.help-nav a').forEach(function (link) {
+  link.addEventListener('click', function () {
+    document.querySelectorAll('.help-nav a').forEach(function (item) { item.classList.remove('active'); });
+    link.classList.add('active');
+  });
+});
+</script>
+{% endblock %}

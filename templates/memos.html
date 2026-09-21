@@ -1,0 +1,166 @@
+{% extends 'layout.html' %}
+{% block content %}
+<style>
+@media print {
+  html, body { background: #fff !important; color: #000 !important; font-family: "Times New Roman", serif !important; font-size: 11pt; }
+  nav, footer, .toast-container, #userNotificationToastContainer { display: none !important; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  .container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+  .table, .table td, .table th {
+    color: #000 !important;
+    border-color: #999 !important;
+  }
+  @page { size: A4 landscape; margin: 15mm 12mm 18mm; }
+  .table { width: 100% !important; font-size: 8pt; border-collapse: collapse !important; }
+  .table td, .table th { border: 1px solid #000 !important; padding: 4px !important; }
+  .table thead, .table-striped > tbody > tr:nth-of-type(odd) > * { background: #fff !important; color: #000 !important; }
+  .official-footer { display: block !important; }
+}
+.print-only { display: none; }
+.official-footer { display: none; }
+.journal-360 { font-size: .83rem; border: 1px solid rgba(13, 202, 240, .28); border-radius: .7rem; overflow: hidden; }
+.journal-360 th { font-size: .71rem; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; padding: .52rem .48rem; }
+.journal-360 td { padding: .48rem; vertical-align: middle; }
+.journal-360 td:nth-child(4) { min-width: 260px; }
+.journal-360 .small { font-size: .72rem; line-height: 1.25; }
+.journal-360 .badge { font-size: .68rem; }
+@media (max-width: 780px) {
+  .journal-360 th:nth-child(3), .journal-360 td:nth-child(3), .journal-360 th:nth-child(6), .journal-360 td:nth-child(6) { display: none; }
+}
+</style>
+
+<div class="print-only mb-4">
+  <div class="d-flex justify-content-between" style="color:#000; font-size:10pt;"><div>Организация: ______________________________</div><div>УТВЕРЖДАЮ<br>________________ /____________/</div></div>
+  <h2 class="mb-2 text-center" style="color:#000; text-shadow:none;">ЖУРНАЛ УЧЕТА СЛУЖЕБНЫХ ЗАПИСОК</h2>
+  <div style="color:#000;">
+    <div>Дата печати: {{ now().strftime('%d.%m.%Y %H:%M') }}</div>
+    <div>
+      Период: {{ date_from if date_from else 'не задан' }} - {{ date_to if date_to else 'не задан' }}
+      {% if department_id %}| Отдел: {{ departments | selectattr('id', 'equalto', department_id|int) | map(attribute='name') | list | first }}{% endif %}
+      {% if executor_id and filter_users %}| Исполнитель: {{ filter_users | selectattr('id', 'equalto', executor_id|int) | map(attribute='full_name') | list | first }}{% endif %}
+      {% if search %}| Поиск: {{ search }}{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3 no-print">
+  <h3 class="mb-0">Журнал служебных записок</h3>
+  <div class="d-flex gap-2">
+    {% if current_user.role in ['admin', 'superadmin'] %}
+    <a href="{{ url_for('memos_archive_page') }}" class="btn btn-outline-warning">Архив</a>
+    {% endif %}
+    <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Печать</button>
+    <a href="{{ url_for('new_memo_page') }}" class="btn btn-primary">Новая служебная</a>
+  </div>
+</div>
+
+<form method="get" class="row g-2 align-items-end mb-3 no-print">
+  <div class="col-auto">
+    <label for="date_from" class="form-label">С</label>
+    <input type="date" id="date_from" name="date_from" class="form-control" value="{{ date_from }}">
+  </div>
+
+  <div class="col-auto">
+    <label for="date_to" class="form-label">По</label>
+    <input type="date" id="date_to" name="date_to" class="form-control" value="{{ date_to }}">
+  </div>
+
+  <div class="col-auto">
+    <label for="department_id" class="form-label">Отдел</label>
+    <select id="department_id" name="department_id" class="form-select">
+      <option value="">Все</option>
+      {% for dep in departments %}
+      <option value="{{ dep.id }}" {% if department_id == dep.id|string %}selected{% endif %}>{{ dep.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-auto">
+    <label for="search" class="form-label">Поиск</label>
+    <input type="text" id="search" name="search" class="form-control" value="{{ search or '' }}" placeholder="Номер, содержание">
+  </div>
+
+  {% if filter_users %}
+  <div class="col-auto">
+    <label for="executor_id" class="form-label">Исполнитель</label>
+    <select id="executor_id" name="executor_id" class="form-select">
+      <option value="">Все</option>
+      {% for user in filter_users %}
+      <option value="{{ user.id }}" {% if executor_id == user.id|string %}selected{% endif %}>{{ user.full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="col-auto">
+    <button type="submit" class="btn btn-primary">Фильтровать</button>
+    <a href="{{ url_for('memos_page') }}" class="btn btn-secondary">Сбросить</a>
+  </div>
+</form>
+
+<div class="table-responsive journal-360 shadow-sm">
+<table class="table table-striped align-middle mb-0">
+  <thead class="table-dark">
+    <tr>
+      <th>№</th>
+      <th>Дата</th>
+      <th>Отдел</th>
+      <th>Краткое содержание</th>
+      <th>Исполнитель</th>
+      <th>Утверждение</th>
+      <th class="no-print"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for memo in memos %}
+    {% set executor_user = executor_lookup.get(memo.executor_id) if executor_lookup else None %}
+    {% set executor_name = executor_user.full_name if executor_user else ((memo.recipients | selectattr('role', 'equalto', 'executor') | map(attribute='user.full_name') | list | first) or '-') %}
+    {% set department_name = (memo.departments | map(attribute='name') | list | first) or '-' %}
+    <tr>
+      <td>{{ memo.reg_number or memo.id }}</td>
+      <td>{{ (memo.letter_date or memo.created_at).strftime('%d.%m.%Y') if (memo.letter_date or memo.created_at) else '' }}</td>
+      <td>{{ department_name }}</td>
+      <td>
+        <strong>{{ memo.subject or '-' }}</strong>
+        {% if memo.body %}
+        <div class="text-muted small">{{ memo.body[:120] }}{% if memo.body|length > 120 %}...{% endif %}</div>
+        {% endif %}
+      </td>
+      <td>{{ executor_name }}</td>
+      <td>
+        {% if memo.approval_status == 'approved' %}
+        <span class="badge text-bg-success">Утверждено</span>
+        <div class="small text-muted">{{ memo.approved_by.full_name if memo.approved_by else '' }}{% if memo.approved_at %}<br>{{ memo.approved_at.strftime('%d.%m.%Y %H:%M') }}{% endif %}</div>
+        {% else %}
+        <span class="badge text-bg-warning">На утверждении</span>
+        {% endif %}
+      </td>
+      <td class="no-print text-nowrap">
+        <a href="{{ url_for('memo_view', memo_id=memo.id) }}" class="btn btn-sm btn-outline-primary">Открыть</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="7" class="text-center text-muted">Служебных записок пока нет</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% set pagination_params = {'date_from': date_from, 'date_to': date_to} %}
+{% if department_id %}{% set _ = pagination_params.update({'department_id': department_id}) %}{% endif %}
+{% if executor_id %}{% set _ = pagination_params.update({'executor_id': executor_id}) %}{% endif %}
+{% if search %}{% set _ = pagination_params.update({'search': search}) %}{% endif %}
+{% set pagination_endpoint = 'memos_page' %}
+{% include 'partials/_pagination.html' %}
+<div class="official-footer mt-4" style="color:#000;">Ответственный за ведение журнала: __________________ /____________/ &nbsp;&nbsp;&nbsp; Дата: {{ now().strftime('%d.%m.%Y') }}</div>
+{% endblock %}

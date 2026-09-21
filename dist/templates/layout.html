@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ title or 'Документооборот' }}</title>
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+  <!-- Иконки -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- 💎 Дополнительные стили -->
+  <style>
+    body {
+      background: radial-gradient(circle at 20% 30%, #0a0a0f, #0d1117, #080808);
+      color: #e5e5e5;
+      font-family: "Segoe UI", "Roboto", sans-serif;
+      min-height: 100vh;
+    }
+
+    /* === Навбар === */
+    .navbar {
+      background: rgba(10, 10, 15, 0.85);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+      box-shadow: 0 2px 8px rgba(0, 255, 255, 0.1);
+    }
+
+    .navbar-brand {
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: #00e0ff !important;
+      text-shadow: 0 0 10px #00e0ff;
+    }
+
+    .nav-link {
+      color: #bfc7d5 !important;
+      transition: all 0.3s ease;
+    }
+
+    .nav-link:hover, .nav-link.active {
+      color: #00e0ff !important;
+      text-shadow: 0 0 10px #00e0ff;
+    }
+
+    /* === Основной контейнер === */
+    .container {
+      background: rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(12px);
+      border-radius: 15px;
+      padding: 25px;
+      box-shadow: 0 0 25px rgba(0, 255, 255, 0.05);
+      border: 1px solid rgba(0, 255, 255, 0.1);
+      animation: fadeIn 0.5s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    h3, h2, h1 {
+      color: #00e0ff;
+      text-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+      letter-spacing: 0.5px;
+    }
+
+    /* === Кнопки === */
+    .btn-primary {
+      background: linear-gradient(135deg, #007bff, #00d4ff);
+      border: none;
+      box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #0096ff, #00e0ff);
+      box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #cfd6e3;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(0, 255, 255, 0.1);
+      color: #00e0ff;
+    }
+
+    /* === Таблицы === */
+    table {
+      color: #e5e5e5;
+    }
+
+    thead {
+      background: rgba(0, 255, 255, 0.08);
+      color: #00e0ff;
+      border-bottom: 2px solid rgba(0, 255, 255, 0.15);
+    }
+
+    tbody tr:hover {
+      background: rgba(0, 255, 255, 0.05);
+      transition: background 0.3s;
+    }
+
+    .table-success {
+      background-color: rgba(0, 255, 100, 0.15) !important;
+    }
+
+    /* === Сообщения === */
+    .alert {
+      background: rgba(0, 255, 255, 0.1);
+      border: 1px solid rgba(0, 255, 255, 0.3);
+      color: #00e0ff;
+      box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+    }
+
+    /* === Ссылки === */
+    a {
+      color: #00e0ff;
+      text-decoration: none;
+    }
+    a:hover {
+      color: #00ffff;
+      text-shadow: 0 0 6px #00e0ff;
+    }
+
+    /* === Прогресс-бары === */
+    .progress {
+      background-color: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      height: 18px;
+    }
+
+    .progress-bar {
+      transition: width 0.4s ease;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      color: #8fa0b2;
+      font-size: 0.9em;
+    }
+/* === Переопределение Bootstrap bg-light под хай-тек стиль === */
+.bg-light {
+  background: rgba(0, 255, 255, 0.05) !important;
+  color: #00e0ff !important;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+}
+
+/* Немного подсветки при наведении */
+.bg-light:hover {
+  background: rgba(0, 255, 255, 0.1) !important;
+}
+
+/* Для текста внутри светлых элементов */
+.bg-light th, .bg-light td, .bg-light a {
+  color: #e0faff !important;
+}
+
+/* === Гамбургер хай-тек стиль === */
+.navbar-toggler {
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: rgba(0, 255, 255, 0.05);
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.navbar-toggler:hover {
+  background: rgba(0, 255, 255, 0.15);
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
+}
+
+/* Меняем стандартный SVG Bootstrap на неоновый */
+.navbar-dark .navbar-toggler-icon {
+  background-image: url("data:image/svg+xml;charset=utf8,\
+  %3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E\
+  %3Cpath stroke='rgba(0,255,255,0.9)' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E\
+  %3C/svg%3E");
+  filter: drop-shadow(0 0 4px rgba(0,255,255,0.6));
+}
+.table {
+  color: #e6faff !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-collapse: separate !important;
+  border-spacing: 0;
+  border: 1px solid rgba(0, 255, 255, 0.15) !important;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.05);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.table thead {
+  background: linear-gradient(135deg, rgba(0,255,255,0.15), rgba(0,180,255,0.08)) !important;
+  color: #00e0ff !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-bottom: 2px solid rgba(0, 255, 255, 0.25) !important;
+}
+
+.table tbody {
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+.table-bordered > :not(caption) > * > * {
+  border: 1px solid rgba(0, 255, 255, 0.15) !important;
+}
+
+.table-hover tbody tr:hover {
+  background: rgba(0, 255, 255, 0.05) !important;
+  box-shadow: 0 0 12px rgba(0,255,255,0.05) inset;
+  transition: background 0.3s ease;
+}
+.table td, .table th {
+  color: #e6faff !important;
+  background: transparent !important;
+}
+ /* === 🔔 Баннер уведомлений в хай-тек стиле === */
+.notification-banner {
+  position: fixed;
+  top: 15px;
+  right: 20px;
+  z-index: 9999;
+  background: rgba(0, 255, 255, 0.08);
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  box-shadow: 0 0 25px rgba(0, 255, 255, 0.3);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  color: #e0faff;
+  min-width: 320px;
+  animation: fadeInDown 0.6s ease;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.notification-banner h6 {
+  font-weight: 600;
+  color: #00e0ff;
+  text-shadow: 0 0 6px rgba(0,255,255,0.4);
+}
+
+.notification-banner ul {
+  list-style: "• ";
+  padding-left: 20px;
+  margin-bottom: 0;
+  color: #ccefff;
+}
+.modal {
+  position: fixed !important;
+  z-index: 9999 !important;
+  inset: 0;
+  /* ❌ убери display:block */
+}
+
+.modal-backdrop {
+  position: fixed !important;
+  z-index: 9998 !important;
+  background: rgba(0,0,0,0.65) !important;
+  backdrop-filter: blur(6px);
+}
+    .modal-content {
+  background: rgba(10, 20, 25, 0.95) !important; /* полупрозрачный тёмный фон */
+  color: #e0faff !important;
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 12px;
+  box-shadow: 0 0 25px rgba(0, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+}
+
+/* Заголовок модалки */
+.modal-header {
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  background: rgba(0, 255, 255, 0.05);
+  color: #00e0ff;
+  text-shadow: 0 0 8px rgba(0,255,255,0.4);
+}
+
+/* Тело и футер */
+.modal-body {
+  background: transparent;
+  color: #cfefff;
+}
+
+.modal-footer {
+  border-top: 1px solid rgba(0, 255, 255, 0.15);
+  background: rgba(0,255,255,0.03);
+}
+
+/* Кнопка закрытия */
+.btn-close {
+  filter: invert(80%) sepia(100%) hue-rotate(180deg) brightness(110%);
+}
+.btn-close:hover {
+  filter: invert(100%) sepia(100%) hue-rotate(180deg) brightness(130%);
+}
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark mb-4">
+  <div class="container-fluid">
+    <!-- Бренд -->
+    <a class="navbar-brand" href="/">
+      <i class="bi bi-cpu"></i> Документооборот
+    </a>
+
+    <!-- Гамбургер -->
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent"
+            aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <!-- Контент навбара -->
+    <div class="collapse navbar-collapse" id="navbarContent">
+      {% if current_user.is_authenticated %}
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+
+          {% if current_user.role == 'admin' %}
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_users') }}">Пользователи</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_departments') }}">Отделы</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_activity_types') }}">Типы активностей</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('manage_reports') }}">Отчёты</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('value_templates_page') }}">⚙️ Шаблоны</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('plans_list') }}">📅 Планы</a></li>
+          {% endif %}
+<li class="nav-item"><a class="nav-link" href="{{ url_for('my_plans') }}">🧭 Мои планы</a></li>
+
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('activities_page') }}">Задачи</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('letters_page') }}">Письма</a></li>
+<li class="nav-item">
+  <a class="nav-link" href="{{ url_for('document_access_manager') }}">
+    <i class="bi bi-shield-lock"></i> Доступ к документам
+  </a>
+</li>
+          <li class="nav-item">
+  <a class="nav-link" href="{{ url_for('global_search') }}">
+    <i class="bi bi-search"></i> Поиск
+  </a>
+</li>
+        </ul>
+
+        <!-- Правая часть -->
+        <div class="d-flex align-items-center">
+          <span class="navbar-text me-3 text-info">
+            <i class="bi bi-person-circle"></i> {{ current_user.full_name }}
+          </span>
+          <a class="btn btn-outline-info btn-sm" href="{{ url_for('logout') }}">
+            <i class="bi bi-box-arrow-right"></i> Выход
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="alert alert-info alert-dismissible fade show">
+        {% for msg in messages %}
+          {{ msg }}<br>
+        {% endfor %}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</div>
+
+<footer>
+  <p>© {{ now().year }} Документооборот | Hi-Tech UI v1.0</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const FIVE_MIN = 5 * 60 * 1000;
+
+  // ключи в localStorage
+  const todayKey = () => {
+    const d = new Date(); d.setHours(0,0,0,0);
+    return "notify_snooze_until_" + d.toISOString().slice(0,10);
+  };
+  const lastHashKey = "notify_last_hash"; // чтобы не показывать один и тот же набор задач
+
+  // стартовая проверка через 2 сек и далее каждые 5 минут
+  setTimeout(checkNotifications, 2000);
+  setInterval(checkNotifications, FIVE_MIN);
+
+  function checkNotifications() {
+    // если включён "не беспокоить до завтра" — выходим
+    if (localStorage.getItem(todayKey()) === "1") return;
+
+    fetch("/api/notifications")
+      .then(r => r.json())
+      .then(data => {
+        if (!data || !data.count) return;
+
+        // считаем хэш заголовков, чтобы не дублировать баннер
+        const hash = simpleHash((data.titles || []).join("|"));
+        if (localStorage.getItem(lastHashKey) === hash) return;
+
+        showNotificationBanner(data.message, data.titles, hash);
+      })
+      .catch(err => console.error("Ошибка уведомлений:", err));
+  }
+
+  function showNotificationBanner(message, titles, hash) {
+    // не более одного активного баннера
+    const existing = document.querySelector(".notification-banner");
+    if (existing) existing.remove();
+
+    const banner = document.createElement("div");
+    banner.classList.add("notification-banner");
+    banner.innerHTML = `
+      <div class="d-flex justify-content-between align-items-start p-3">
+        <div class="me-3">
+          <h6 class="mb-2 text-info"><i class="bi bi-bell-fill"></i> ${message}</h6>
+          <ul class="mb-2 small text-light">
+            ${(titles || []).map(t => `<li>${escapeHtml(t)}</li>`).join("")}
+          </ul>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-info" id="notifyOpenTasks">
+              Открыть задачи
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="notifySnooze">
+              Не беспокоить до завтра
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-outline-info btn-sm" id="notifyClose">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    `;
+    document.body.appendChild(banner);
+
+    document.getElementById("notifyClose").addEventListener("click", () => banner.remove());
+    document.getElementById("notifyOpenTasks").addEventListener("click", () => {
+      window.location.href = "/activities"; // при желании можно перейти сразу на фильтр «мои + open»
+    });
+    document.getElementById("notifySnooze").addEventListener("click", () => {
+      localStorage.setItem(todayKey(), "1"); // не показывать больше сегодня
+      banner.remove();
+    });
+
+    // помечаем последний показанный набор задач
+    if (hash) localStorage.setItem(lastHashKey, hash);
+  }
+
+  // простой hash строки, чтобы отличать набор задач
+  function simpleHash(s) {
+    let h = 0, i, chr;
+    if (s.length === 0) return "0";
+    for (i = 0; i < s.length; i++) {
+      chr = s.charCodeAt(i);
+      h = ((h << 5) - h) + chr;
+      h |= 0;
+    }
+    return String(h);
+  }
+
+  // экранирование для безопасности
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+});
+  document.addEventListener('show.bs.modal', function (e) {
+  document.body.appendChild(e.target);
+});
+</script>
+
+</body>
+</html>

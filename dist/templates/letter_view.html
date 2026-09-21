@@ -1,0 +1,272 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h3>Письмо #{{ le.id }} — {{ le.subject }}</h3>
+<p><strong>Дата письма:</strong> {{ le.letter_date }}</p>
+<p><strong>Отдел:</strong> {{ le.department.name if le.department else '-' }}</p>
+<p><strong>Автор:</strong> {{ le.author.full_name }}</p>
+<pre class="border p-3 bg-light">{{ le.body }}</pre>
+{{can_edit }}
+
+<h5>Исполнители:</h5>
+<ul>
+{% for r in le.recipients if r.role == 'executor' %}
+  <li>{{ r.user.full_name }}</li>
+{% endfor %}
+</ul>
+
+<h5>Ознакомление:</h5>
+<ul>
+{% for r in le.recipients if r.role == 'observer' %}
+  <li>{{ r.user.full_name }}</li>
+{% endfor %}
+</ul>
+
+<h5>📎 Документы</h5>
+<ul>
+  {% for d in le.documents %}
+    <li class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <a href="{{ url_for('download_letter_document', doc_id=d.id) }}" class="text-decoration-none">
+          📄 {{ d.filename }}
+        </a>
+      </div>
+      <div>
+        <button type="button"
+                class="btn btn-sm btn-outline-info"
+                data-bs-toggle="modal"
+                data-bs-target="#viewDocModal"
+                data-doc="{{ d.doc_rec | e }}">
+          👁 Просмотреть содержимое
+        </button>
+      </div>
+    </li>
+  {% else %}
+    <li class="text-muted">Нет документов</li>
+  {% endfor %}
+</ul>
+
+{% if can_edit %}
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('upload_letter_document', letter_id=le.id) }}">
+    <input type="file" name="file" class="form-control mb-2" required>
+    <button class="btn btn-outline-success">Добавить документ</button>
+  </form>
+{% else %}
+  <div class="alert alert-info">Редактирование документов недоступно — вы не автор письма.</div>
+{% endif %}
+
+
+<hr>
+<hr>
+<h5>🧩 Дополнительные значения</h5>
+
+<div id="extra-values-list" class="mb-3">
+  {% if le.extra_values %}
+    {% set extras = le.extra_values | from_json %}
+    {% for v in extras %}
+      <div class="card mb-2 shadow-sm">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <div>
+            <strong>{{ v.rusname }}</strong>
+            <div class="text-muted small">{{ v.type }}</div>
+            <div>{{ v.value or '-' }}</div>
+          </div>
+          {% if can_edit %}
+          <button class="btn btn-sm btn-outline-danger delete-extra" data-name="{{ v.name }}">🗑</button>
+            {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="text-muted">Нет дополнительных значений</p>
+  {% endif %}
+</div>
+
+<!-- Кнопка для вызова модалки -->
+{% if can_edit %}
+  <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addExtraModal">
+    ➕ Добавить значение
+  </button>
+{% endif %}
+
+<!-- === Модальное окно добавления значения === -->
+<div class="modal fade" id="addExtraModal" tabindex="-1" aria-labelledby="addExtraLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addExtraLabel">Добавить значение</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Выберите шаблон</label>
+          <select id="extra-template" class="form-select">
+            <option value="">-- Выберите --</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" id="extra-label">Значение</label>
+          <input id="extra-value" class="form-control" placeholder="Введите значение...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-success" id="saveExtraBtn">💾 Добавить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const select = document.getElementById("extra-template");
+  const inputContainer = document.querySelector(".modal-body .mb-3:nth-child(2)");
+  const label = document.getElementById("extra-label");
+  let inputEl = document.getElementById("extra-value");
+  const saveBtn = document.getElementById("saveExtraBtn");
+
+  // Загружаем шаблоны
+  const res = await fetch("/api/value-templates");
+  const templates = await res.json();
+  templates.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t.id;
+    opt.textContent = `${t.rusname} (${t.type})`;
+    opt.dataset.type = t.type;
+    opt.dataset.name = t.name;
+    select.appendChild(opt);
+  });
+
+  // Изменяем поле при выборе шаблона
+  select.addEventListener("change", e => {
+    const sel = templates.find(t => t.id == e.target.value);
+    if (!sel) return;
+
+    label.textContent = sel.rusname;
+
+    // Удаляем старое поле (если было)
+    if (inputEl) inputEl.remove();
+
+    // Создаём новое в зависимости от типа
+    if (sel.type === "bool") {
+      inputEl = document.createElement("select");
+      inputEl.className = "form-select";
+      inputEl.innerHTML = `
+        <option value="">-- Выберите --</option>
+        <option value="Да">Да</option>
+        <option value="Нет">Нет</option>
+      `;
+    } else {
+      inputEl = document.createElement("input");
+      inputEl.className = "form-control";
+      inputEl.type = sel.type === "int" ? "number" :
+                     sel.type === "date" ? "date" : "text";
+      inputEl.placeholder = "Введите значение...";
+    }
+
+    inputEl.id = "extra-value";
+    inputEl.dataset.name = sel.name;
+    inputEl.dataset.rusname = sel.rusname;
+    inputEl.dataset.type = sel.type;
+    inputContainer.appendChild(inputEl);
+  });
+
+  // Обработка сохранения
+  saveBtn.addEventListener("click", async () => {
+    const sel = templates.find(t => t.id == select.value);
+    if (!sel) {
+      alert("Выберите шаблон!");
+      return;
+    }
+
+    const value = inputEl.value.trim();
+    if (!value) {
+      alert("Введите значение!");
+      return;
+    }
+
+    const data = {
+      extras: [{
+        id: sel.id,
+        name: sel.name,
+        rusname: sel.rusname,
+        type: sel.type,
+        value: value
+      }]
+    };
+
+    const resp = await fetch(`/letters/{{ le.id }}/save_extras`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(data)
+    });
+
+    if (resp.ok) {
+      location.reload();
+    } else {
+      alert("Ошибка при сохранении!");
+    }
+  });
+});
+</script>
+
+<h5>Активности по письму</h5>
+<ul>
+{% for a in le.activities %}
+  <li><a href="{{ url_for('activity_view', activity_id=a.id) }}">{{ a.title }}</a></li>
+{% else %}
+  <li class="text-muted">Нет активностей</li>
+{% endfor %}
+</ul>
+
+<form method="post" action="{{ url_for('create_activity_from_letter', letter_id=le.id) }}">
+  <button class="btn btn-outline-primary">Создать активность на основе письма</button>
+</form>
+<h5 class="mt-4">📋 Активности по письму</h5>
+{% if le.activities %}
+  <ul class="list-group mb-3">
+    {% for a in le.activities %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <strong>{{ a.title }}</strong><br>
+          <small class="text-muted">{{ a.status }}</small>
+        </div>
+        <a href="{{ url_for('activity_view', activity_id=a.id) }}" class="btn btn-sm btn-outline-primary">
+          Открыть
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="text-muted">По этому письму пока нет активностей.</p>
+{% endif %}
+<!-- === Modal для просмотра текста документа === -->
+<div class="modal fade" id="viewDocModal" tabindex="-1" aria-labelledby="viewDocLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="viewDocLabel">Содержимое документа</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body">
+        <pre id="docContent" class="bg-light p-3 border rounded" style="white-space: pre-wrap; font-family: monospace;"></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const modal = document.getElementById("viewDocModal");
+  const docContent = document.getElementById("docContent");
+  modal.addEventListener("show.bs.modal", event => {
+    const button = event.relatedTarget;
+    const text = button.getAttribute("data-doc") || "⚠️ Текст не распознан.";
+    docContent.textContent = text.trim();
+  });
+});
+</script>
+
+{% endblock %}

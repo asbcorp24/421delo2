@@ -1,0 +1,149 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div>
+    <h3 class="mb-1">Шаблоны задач и служебных записок</h3>
+    <div class="text-muted">Типовые реквизиты подставляются в форму создания и остаются доступными для изменения.</div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-6">
+    <section class="card shadow-sm h-100">
+      <div class="card-header bg-primary text-white"><i class="bi bi-check2-square"></i> Новый шаблон задачи</div>
+      <div class="card-body">
+        <form method="post">
+          <input type="hidden" name="template_kind" value="activity">
+          <div class="mb-3">
+            <label class="form-label">Название шаблона</label>
+            <input name="name" class="form-control" placeholder="Например: Нормоконтроль документации" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Название задачи</label>
+            <input name="title" class="form-control" required>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-7">
+              <label class="form-label">Тип задачи</label>
+              <select name="type_id" class="form-select" required>
+                <option value="">-- выберите тип --</option>
+                {% for item in activity_types %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Срок, дней</label>
+              <input name="duration_days" type="number" min="0" class="form-control" placeholder="Не задан">
+            </div>
+          </div>
+          <div class="mb-3 mt-3">
+            <label class="form-label">Описание</label>
+            <textarea name="description" rows="3" class="form-control"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Тема</label>
+            <input name="direction" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Исходный документ</label>
+            <input name="outgoing_document" class="form-control">
+          </div>
+          <button class="btn btn-primary" type="submit"><i class="bi bi-plus-lg"></i> Сохранить шаблон задачи</button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-xl-6">
+    <section class="card shadow-sm h-100">
+      <div class="card-header bg-warning text-dark"><i class="bi bi-journal-text"></i> Новый шаблон служебной записки</div>
+      <div class="card-body">
+        <form method="post">
+          <input type="hidden" name="template_kind" value="memo">
+          <div class="mb-3">
+            <label class="form-label">Название шаблона</label>
+            <input name="name" class="form-control" placeholder="Например: Запрос информации" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Краткое содержание</label>
+            <input name="subject" class="form-control" required>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Отдел по умолчанию</label>
+              <select name="department_id" class="form-select">
+                <option value="">-- не указан --</option>
+                {% for department in departments %}<option value="{{ department.id }}">{{ department.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Исполнитель по умолчанию</label>
+              <select name="executor_id" class="form-select">
+                <option value="">-- не указан --</option>
+                {% for user in users %}<option value="{{ user.id }}">{{ user.full_name }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="mb-3 mt-3">
+            <label class="form-label">Текст служебной записки</label>
+            <textarea name="body" rows="7" class="form-control"></textarea>
+          </div>
+          <button class="btn btn-warning" type="submit"><i class="bi bi-plus-lg"></i> Сохранить шаблон служебной</button>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="row g-4 mt-1">
+  <div class="col-xl-6">
+    <section class="card shadow-sm">
+      <div class="card-header">Шаблоны задач</div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead><tr><th>Шаблон</th><th>Тип</th><th>Срок</th><th class="text-end">Действия</th></tr></thead>
+          <tbody>
+            {% for template in activity_templates %}
+            <tr>
+              <td><strong>{{ template.name }}</strong><div class="small text-muted">{{ template.title }}</div></td>
+              <td>{{ template.type.name if template.type else '-' }}</td>
+              <td>{{ template.duration_days ~ ' дн.' if template.duration_days is not none else '-' }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-info" href="{{ url_for('create_activity', template_id=template.id) }}" title="Использовать"><i class="bi bi-play-fill"></i></a>
+                <form method="post" action="{{ url_for('delete_document_template', template_kind='activity', template_id=template.id) }}" class="d-inline" onsubmit="return confirm('Удалить шаблон?')">
+                  <button class="btn btn-sm btn-outline-danger" title="Удалить"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% else %}<tr><td colspan="4" class="text-center text-muted py-3">Шаблонов задач пока нет.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  <div class="col-xl-6">
+    <section class="card shadow-sm">
+      <div class="card-header">Шаблоны служебных записок</div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead><tr><th>Шаблон</th><th>Отдел</th><th>Исполнитель</th><th class="text-end">Действия</th></tr></thead>
+          <tbody>
+            {% for template in memo_templates %}
+            <tr>
+              <td><strong>{{ template.name }}</strong><div class="small text-muted">{{ template.subject }}</div></td>
+              <td>{{ template.department.name if template.department else '-' }}</td>
+              <td>{{ template.executor.full_name if template.executor else '-' }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-info" href="{{ url_for('new_memo_page', template_id=template.id) }}" title="Использовать"><i class="bi bi-play-fill"></i></a>
+                <form method="post" action="{{ url_for('delete_document_template', template_kind='memo', template_id=template.id) }}" class="d-inline" onsubmit="return confirm('Удалить шаблон?')">
+                  <button class="btn btn-sm btn-outline-danger" title="Удалить"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% else %}<tr><td colspan="4" class="text-center text-muted py-3">Шаблонов служебных записок пока нет.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

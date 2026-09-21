@@ -1,0 +1,134 @@
+{% extends 'layout.html' %}
+{% block content %}
+{% set executor_user = executor_lookup.get(memo.executor_id) if executor_lookup else None %}
+{% set executor_name = executor_user.full_name if executor_user else ((memo.recipients | selectattr('role', 'equalto', 'executor') | map(attribute='user.full_name') | list | first) or '-') %}
+{% set department_name = (memo.departments | map(attribute='name') | list | first) or '-' %}
+
+<style>
+  .memo-print-sheet { display: none; }
+  @media print {
+    @page { size: A4 portrait; margin: 18mm 18mm 20mm; }
+    body * { visibility: hidden !important; }
+    .memo-print-sheet, .memo-print-sheet * { visibility: visible !important; }
+    .memo-print-sheet { display: block !important; position: absolute; inset: 0; width: 100%; color: #000 !important; font-family: "Times New Roman", serif !important; font-size: 12pt; line-height: 1.35; }
+    .memo-print-requisites { display: flex; justify-content: space-between; min-height: 38mm; font-size: 10pt; }
+    .memo-print-title { margin: 7mm 0 5mm; text-align: center; font-size: 16pt; font-weight: bold; text-transform: uppercase; }
+    .memo-print-number { text-align: center; margin-bottom: 7mm; }
+    .memo-print-meta { display: flex; justify-content: space-between; margin: 4mm 0; }
+    .memo-print-body { min-height: 90mm; padding: 4mm 0; white-space: pre-wrap; }
+    .memo-print-signature { width: 48%; margin-left: auto; margin-top: 18mm; }
+  }
+</style>
+
+<section class="memo-print-sheet">
+  <div class="memo-print-requisites"><div>{{ department_name }}<br>______________________________</div><div>УТВЕРЖДАЮ<br>________________ /____________/<br>«___» __________ 20__ г.</div></div>
+  <div class="memo-print-title">Служебная записка</div>
+  <div class="memo-print-number">№ {{ memo.reg_number or memo.id }} от {{ (memo.letter_date or memo.created_at).strftime('%d.%m.%Y') if (memo.letter_date or memo.created_at) else '-' }}</div>
+  <div class="memo-print-meta"><div><strong>Кому:</strong> {{ executor_name }}</div><div><strong>Отдел:</strong> {{ department_name }}</div></div>
+  <div><strong>Тема:</strong> {{ memo.subject or '-' }}</div>
+  <div class="memo-print-body">{{ memo.body or '' }}</div>
+  <div class="memo-print-signature">Автор: {{ memo.author.full_name if memo.author else '-' }}<br><br>__________________ /____________/</div>
+</section>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3 no-print">
+  <h3 class="mb-0">Служебная записка №{{ memo.reg_number or memo.id }}{% if memo.archived_at %} <span class="badge text-bg-warning">В архиве</span>{% endif %}</h3>
+  <div class="d-flex gap-2">
+    {% if memo.approval_status == 'approved' %}
+    <span class="btn btn-success disabled">Утверждено{% if memo.approved_by %}: {{ memo.approved_by.full_name }}{% endif %}</span>
+    {% elif current_user.role in ['manager', 'admin', 'superadmin'] %}
+    <form method="post" action="{{ url_for('approve_memo', memo_id=memo.id) }}">
+      <button class="btn btn-success">Утвердить</button>
+    </form>
+    {% else %}
+    <span class="btn btn-outline-warning disabled">На утверждении</span>
+    {% endif %}
+    {% if current_user.role in ['admin', 'superadmin'] %}
+    <a href="{{ url_for('edit_memo', memo_id=memo.id) }}" class="btn btn-outline-info">Редактировать</a>
+    <form method="post" action="{{ url_for('restore_memo' if memo.archived_at else 'archive_memo', memo_id=memo.id) }}">
+      <button class="btn btn-outline-warning">{{ 'Восстановить из архива' if memo.archived_at else 'Архивировать' }}</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('create_activity_from_letter', letter_id=memo.id) }}">
+      <button class="btn btn-primary">Создать задачу</button>
+    </form>
+    <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Печать</button>
+    <a href="{{ url_for('memos_page') }}" class="btn btn-secondary">Назад</a>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header">Связанные задачи</div>
+  <ul class="list-group list-group-flush">
+    {% for activity in linked_activities %}<li class="list-group-item d-flex justify-content-between"><span>№{{ activity.id }} — {{ activity.title }}</span><a class="btn btn-sm btn-outline-primary" href="{{ url_for('activity_view', activity_id=activity.id) }}">Открыть</a></li>{% else %}<li class="list-group-item text-muted">Задач по этой служебной записке пока нет.</li>{% endfor %}
+  </ul>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    {% if current_user.role in ['admin', 'superadmin'] %}
+    <form method="post" action="{{ url_for('update_letter_reg_number', letter_id=memo.id) }}" class="card card-body mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label">Изменить номер служебной записки</label>
+          <input type="text" name="reg_number" class="form-control" value="{{ memo.reg_number or '' }}" required>
+        </div>
+        <div class="col-md-auto">
+          <button class="btn btn-outline-primary">Сохранить номер</button>
+        </div>
+      </div>
+    </form>
+    {% endif %}
+    <div class="row g-3">
+      <div class="col-md-3">
+        <strong>Дата</strong>
+        <div>{{ (memo.letter_date or memo.created_at).strftime('%d.%m.%Y') if (memo.letter_date or memo.created_at) else '-' }}</div>
+      </div>
+      <div class="col-md-3">
+        <strong>Отдел</strong>
+        <div>{{ department_name }}</div>
+      </div>
+      <div class="col-md-3">
+        <strong>Исполнитель</strong>
+        <div>{{ executor_name }}</div>
+      </div>
+      <div class="col-md-3">
+        <strong>Автор</strong>
+        <div>{{ memo.author.full_name if memo.author else '-' }}</div>
+      </div>
+      <div class="col-12">
+        <strong>Краткое содержание</strong>
+        <div>{{ memo.subject or '-' }}</div>
+      </div>
+      <div class="col-12">
+        <strong>Текст служебной записки</strong>
+        <pre class="border p-3 bg-light mb-0">{{ memo.body or '' }}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header">Документы</div>
+  <div class="card-body">
+    <ul class="mb-0">
+      {% for d in memo.documents %}
+        <li class="mb-2">
+          <a href="{{ url_for('download_letter_document', doc_id=d.id) }}">{{ d.filename }}</a>
+        </li>
+      {% else %}
+        <li class="text-muted">Документов нет</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+
+{% if can_edit %}
+<form method="post" enctype="multipart/form-data" action="{{ url_for('upload_letter_document', letter_id=memo.id) }}" class="card p-3 shadow-sm">
+  <label class="form-label">Добавить документ</label>
+  <input type="file" name="file" class="form-control mb-2" required>
+  <div class="text-end">
+    <button class="btn btn-primary">Загрузить</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

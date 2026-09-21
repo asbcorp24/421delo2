@@ -1,97 +1,182 @@
 {% extends 'layout.html' %}
 {% block content %}
-<h3 class="mb-3">📨 Письма</h3>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<style>
+@media print {
+  html, body { background: #fff !important; color: #000 !important; font-family: "Times New Roman", serif !important; font-size: 11pt; }
+  nav, footer, .toast-container, #userNotificationToastContainer { display: none !important; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  .container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+  .table, .table td, .table th {
+    color: #000 !important;
+    border-color: #999 !important;
+  }
+  @page { size: A4 landscape; margin: 15mm 12mm 18mm; }
+  .table { width: 100% !important; font-size: 8pt; border-collapse: collapse !important; }
+  .table td, .table th { border: 1px solid #000 !important; padding: 4px !important; }
+  .table thead, .table-striped > tbody > tr:nth-of-type(odd) > * { background: #fff !important; color: #000 !important; }
+  .official-footer { display: block !important; }
+}
+.print-only { display: none; }
+.official-footer { display: none; }
+</style>
 
-    <a href="{{ url_for('new_letter_page') }}" class="btn btn-success">
-      ➕ Новое письмо
-    </a>
-
+<div class="print-only mb-4">
+  <div class="d-flex justify-content-between" style="color:#000; font-size:10pt;"><div>Организация: ______________________________</div><div>УТВЕРЖДАЮ<br>________________ /____________/</div></div>
+  <h2 class="mb-2 text-center" style="color:#000; text-shadow:none;">ЖУРНАЛ УЧЕТА ПИСЕМ</h2>
+  <div style="color:#000;">
+    <div>Дата печати: {{ now().strftime('%d.%m.%Y %H:%M') }}</div>
+    <div>
+      Период:
+      {{ date_from if date_from else 'не задан' }} - {{ date_to if date_to else 'не задан' }}
+      {% if source_id %}| Предприятие: {{ sources | selectattr('id', 'equalto', source_id|int) | map(attribute='name') | list | first }}{% endif %}
+      {% if executor_id and filter_users %}| Исполнитель: {{ filter_users | selectattr('id', 'equalto', executor_id|int) | map(attribute='full_name') | list | first }}{% endif %}
+      {% if search %}| Поиск: {{ search }}{% endif %}
+      | Раздел: 
+      {% if filter_type == 'my' %}Мои{% elif filter_type == 'dept' %}Мой отдел{% elif filter_type == 'sent' %}Исходящие{% else %}Все{% endif %}
+    </div>
+  </div>
 </div>
-<!-- ====== Вкладки фильтров ====== -->
-<ul class="nav nav-tabs mb-3">
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3 no-print">
+  <h3 class="mb-0">Журнал писем</h3>
+  <div class="d-flex gap-2">
+    {% if current_user.role in ['admin', 'superadmin'] %}
+    <a href="{{ url_for('letters_archive_page') }}" class="btn btn-outline-warning">Архив</a>
+    {% endif %}
+    <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Печать</button>
+    <a href="{{ url_for('export_journal', kind='letters', format_name='csv') }}" class="btn btn-outline-success">CSV</a>
+    <a href="{{ url_for('new_letter_page') }}" class="btn btn-primary">Новое письмо</a>
+  </div>
+</div>
+
+<form method="get" class="row g-2 align-items-end mb-3 no-print">
+  <input type="hidden" name="filter" value="{{ filter_type }}">
+
+  <div class="col-auto">
+    <label for="date_from" class="form-label">С</label>
+    <input type="date" id="date_from" name="date_from" class="form-control" value="{{ date_from }}">
+  </div>
+
+  <div class="col-auto">
+    <label for="date_to" class="form-label">По</label>
+    <input type="date" id="date_to" name="date_to" class="form-control" value="{{ date_to }}">
+  </div>
+
+  <div class="col-auto">
+    <label for="search" class="form-label">Поиск</label>
+    <input type="text" id="search" name="search" class="form-control" value="{{ search or '' }}" placeholder="Номер, тема, текст">
+  </div>
+
+  <div class="col-auto">
+    <label for="source_id" class="form-label">Предприятие</label>
+    <select id="source_id" name="source_id" class="form-select">
+      <option value="">Все</option>
+      {% for source in sources %}
+      <option value="{{ source.id }}" {% if source_id == source.id|string %}selected{% endif %}>
+        {{ source.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {% if filter_users %}
+  <div class="col-auto">
+    <label for="executor_id" class="form-label">Исполнитель</label>
+    <select id="executor_id" name="executor_id" class="form-select">
+      <option value="">Все</option>
+      {% for user in filter_users %}
+      <option value="{{ user.id }}" {% if executor_id == user.id|string %}selected{% endif %}>
+        {{ user.full_name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="col-auto">
+    <button type="submit" class="btn btn-primary">Фильтровать</button>
+    <a href="{{ url_for('letters_page') }}" class="btn btn-secondary">Сбросить</a>
+  </div>
+</form>
+
+{% set tab_params = {'date_from': date_from, 'date_to': date_to} %}
+{% if source_id %}
+  {% set _ = tab_params.update({'source_id': source_id}) %}
+{% endif %}
+{% if executor_id %}
+  {% set _ = tab_params.update({'executor_id': executor_id}) %}
+{% endif %}
+{% if search %}
+  {% set _ = tab_params.update({'search': search}) %}
+{% endif %}
+
+<ul class="nav nav-tabs mb-3 no-print">
   <li class="nav-item">
-    <a class="nav-link {% if filter_type == 'all' %}active{% endif %}"
-       href="{{ url_for('letters_page', filter='all') }}">
-       Все
-    </a>
+    <a class="nav-link {% if filter_type == 'all' %}active{% endif %}" href="{{ url_for('letters_page', filter='all', **tab_params) }}">Все</a>
   </li>
   <li class="nav-item">
-    <a class="nav-link {% if filter_type == 'my' %}active{% endif %}"
-       href="{{ url_for('letters_page', filter='my') }}">
-       Мои
-    </a>
+    <a class="nav-link {% if filter_type == 'my' %}active{% endif %}" href="{{ url_for('letters_page', filter='my', **tab_params) }}">Мои</a>
   </li>
   <li class="nav-item">
-    <a class="nav-link {% if filter_type == 'dept' %}active{% endif %}"
-       href="{{ url_for('letters_page', filter='dept') }}">
-       Мой отдел
-    </a>
+    <a class="nav-link {% if filter_type == 'dept' %}active{% endif %}" href="{{ url_for('letters_page', filter='dept', **tab_params) }}">Мой отдел</a>
   </li>
   <li class="nav-item">
-    <a class="nav-link {% if filter_type == 'sent' %}active{% endif %}"
-       href="{{ url_for('letters_page', filter='sent') }}">
-       Исходящие
-    </a>
+    <a class="nav-link {% if filter_type == 'sent' %}active{% endif %}" href="{{ url_for('letters_page', filter='sent', **tab_params) }}">Исходящие</a>
   </li>
 </ul>
 
-<!-- ====== Таблица писем ====== -->
-<table class="table table-hover align-middle shadow-sm">
+<table class="table table-striped align-middle shadow-sm">
   <thead class="table-dark">
     <tr>
-      <th style="width: 50px;">#</th>
-      <th>Тема</th>
-      <th>Автор</th>
-      <th>Дата письма</th>
-      <th>Роль / Отдел</th>
-      <th style="width: 120px;">Действия</th>
+      <th>№</th>
+      <th>Дата</th>
+      <th>Предприятие</th>
+      <th>Краткое содержание</th>
+      <th>Исполнитель</th>
+      <th class="no-print"></th>
     </tr>
   </thead>
   <tbody>
     {% for le in letters %}
+    {% set executor_user = executor_lookup.get(le.executor_id) if executor_lookup else None %}
+    {% set source_item = source_lookup.get(le.source_id) if source_lookup else None %}
+    {% set executor_name = executor_user.full_name if executor_user else ((le.recipients | selectattr('role', 'equalto', 'executor') | map(attribute='user.full_name') | list | first) or '-') %}
     <tr>
-      <td>{{ le.id }}</td>
+      <td>{{ le.reg_number or le.id }}</td>
+      <td>{{ (le.letter_date or le.created_at).strftime('%d.%m.%Y') if (le.letter_date or le.created_at) else '' }}</td>
+      <td>{{ source_item.name if source_item else '-' }}</td>
       <td>
-        <strong>{{ le.subject }}</strong><br>
-        <small class="text-muted">{{ le.body[:80] }}{% if le.body|length > 80 %}...{% endif %}</small>
-      </td>
-      <td>{{ le.author.full_name if le.author else '—' }}</td>
-      <td>
-        {% if le.letter_date %}
-          {{ le.letter_date.strftime('%d.%m.%Y') }}
-        {% else %}
-          {{ le.created_at.strftime('%d.%m.%Y') }}
+        <strong>{{ le.subject or '-' }}</strong>
+        {% if le.body %}
+        <div class="text-muted small">{{ le.body[:120] }}{% if le.body|length > 120 %}...{% endif %}</div>
         {% endif %}
       </td>
-      <td>
-        {# роль пользователя в письме #}
-        {% for r in le.recipients %}
-          {% if r.user_id == current_user.id %}
-            {% if r.role == 'executor' %}
-              <span class="badge bg-primary">Исполнитель</span>
-            {% else %}
-              <span class="badge bg-secondary">Ознакомление</span>
-            {% endif %}
-          {% endif %}
-        {% endfor %}
-        {# если письмо адресовано отделу пользователя #}
-        {% for dep in le.departments %}
-          {% if dep.id == current_user.department_id %}
-            <span class="badge bg-info text-dark">Отдел: {{ dep.name }}</span>
-          {% endif %}
-        {% endfor %}
-      </td>
-      <td>
-        <a href="{{ url_for('letter_view', letter_id=le.id) }}"
-           class="btn btn-sm btn-outline-primary">Открыть</a>
+      <td>{{ executor_name }}</td>
+      <td class="text-nowrap no-print">
+        <a href="{{ url_for('letter_view', letter_id=le.id) }}" class="btn btn-sm btn-outline-primary">Открыть</a>
       </td>
     </tr>
     {% else %}
     <tr>
-      <td colspan="6" class="text-center text-muted">Нет писем</td>
+      <td colspan="6" class="text-center text-muted">Писем пока нет</td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+{% set pagination_params = {'filter': filter_type, 'date_from': date_from, 'date_to': date_to} %}
+{% if source_id %}{% set _ = pagination_params.update({'source_id': source_id}) %}{% endif %}
+{% if executor_id %}{% set _ = pagination_params.update({'executor_id': executor_id}) %}{% endif %}
+{% if search %}{% set _ = pagination_params.update({'search': search}) %}{% endif %}
+{% set pagination_endpoint = 'letters_page' %}
+{% include 'partials/_pagination.html' %}
+
 {% endblock %}

@@ -1,42 +1,156 @@
 {% extends 'layout.html' %}
 {% block content %}
-<h3>Создание активности</h3>
+<h3 class="mb-3">Создание задачи</h3>
 
 <form method="post" class="card p-3 shadow-sm">
+  {% if templates %}
   <div class="mb-3">
-    <label class="form-label">Тип активности</label>
-    <select name="type_id" class="form-select">
-      <option value="">-- не указано --</option>
-      {% for t in types %}
-        <option value="{{ t.id }}">{{ t.name }}</option>
+    <label for="activity_template" class="form-label">Шаблон задачи</label>
+    <select id="activity_template" class="form-select">
+      <option value="">-- создать без шаблона --</option>
+      {% for template in templates %}
+      <option value="{{ template.id }}" {% if selected_template and selected_template.id == template.id %}selected{% endif %}>{{ template.name }}</option>
       {% endfor %}
     </select>
+    <div class="form-text">Шаблон заполнит поля ниже. Их можно изменить перед созданием.</div>
+  </div>
+  {% endif %}
+
+  <div class="mb-3">
+    <label class="form-label">Тип задачи</label>
+    <select name="type_id" class="form-select" required>
+      <option value="" selected disabled>-- выберите тип --</option>
+      {% for t in types %}
+        <option value="{{ t.id }}" {% if selected_template and selected_template.type_id == t.id %}selected{% endif %}>{{ t.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="form-text">Обязательное поле.</div>
   </div>
 
   <div class="mb-3">
     <label class="form-label">Название</label>
-    <input type="text" name="title" class="form-control" required placeholder="Введите название активности">
+    <input type="text" name="title" class="form-control" value="{{ selected_template.title if selected_template else '' }}" required>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Приоритет</label>
+    <select name="priority" class="form-select">
+      <option value="1">1 - низкий</option>
+      <option value="2">2 - обычный</option>
+      <option value="3" selected>3 - средний</option>
+      <option value="4">4 - высокий</option>
+      <option value="5">5 - критический</option>
+    </select>
   </div>
 
   <div class="mb-3">
     <label class="form-label">Описание</label>
-    <textarea name="description" class="form-control" rows="4" placeholder="Опишите, что нужно сделать"></textarea>
+    <textarea name="description" class="form-control" rows="3">{{ selected_template.description if selected_template else '' }}</textarea>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Тема</label>
+    <input
+      list="directions"
+      name="direction"
+      class="form-control"
+      placeholder="Выберите тематику или введите новую вручную"
+      value="{{ selected_template.direction if selected_template else '' }}"
+    >
+    <datalist id="directions">
+      {% for d in existing_directions %}
+        <option value="{{ d }}"></option>
+      {% endfor %}
+    </datalist>
+    <div class="form-text">Можно выбрать существующую тематику или ввести новую вручную.</div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Исходный документ</label>
+    <input type="text" name="outgoing_document" class="form-control" placeholder="Введите информацию вручную" value="{{ selected_template.outgoing_document if selected_template else '' }}">
   </div>
 
   <div class="row mb-3">
     <div class="col">
       <label class="form-label">Дата начала</label>
-      <input type="date" name="start_date" class="form-control">
+      <input type="date" name="start_date" class="form-control" value="{{ initial_start_date }}">
     </div>
     <div class="col">
       <label class="form-label">Дата окончания</label>
-      <input type="date" name="end_date" class="form-control">
+      <input type="date" name="end_date" class="form-control" value="{{ initial_end_date }}">
     </div>
   </div>
 
-  <div class="d-flex justify-content-between">
+  <div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" name="add_to_plan" value="1" id="add_to_plan">
+    <label class="form-check-label" for="add_to_plan">Добавить задачу в план</label>
+    <div class="form-text">Задача будет добавлена в план выбранного исполнителя, если дата ее начала входит в период плана.</div>
+  </div>
+
+  {% if can_assign_executors %}
+    <div class="mb-3">
+      <label class="form-label">{{ executor_scope_label }}</label>
+      <div class="dropdown">
+        <button class="btn btn-outline-info dropdown-toggle w-100 text-start" type="button" id="executorsDropdown" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+          <span id="executorsLabel">Выберите ответственных</span>
+        </button>
+        <div class="dropdown-menu p-3 w-100" aria-labelledby="executorsDropdown" style="max-height: 360px; overflow-y: auto;">
+          <input type="search" id="executorsSearch" class="form-control mb-2" placeholder="Поиск сотрудника">
+          {% for u in users %}
+          <div class="form-check mb-2 executor-option" data-search="{{ u.full_name|lower }} {{ u.department.name|lower if u.department else '' }}">
+            <input
+              class="form-check-input executor-check"
+              type="checkbox"
+              name="executors"
+              value="{{ u.id }}"
+              id="executor_{{ u.id }}"
+            >
+            <label class="form-check-label" for="executor_{{ u.id }}">
+              {{ u.full_name }}{% if u.department %} ({{ u.department.name }}){% endif %}
+            </label>
+          </div>
+          {% endfor %}
+          <div id="executorsEmpty" class="text-muted small d-none">Ничего не найдено.</div>
+        </div>
+      </div>
+      <div class="form-text">Можно выбрать нескольких сотрудников, для каждого будет создана отдельная задача.{% if current_user.role == 'deputy' %} Доступны только сотрудники вашего отдела.{% endif %}</div>
+    </div>
+  {% else %}
+    <input type="hidden" name="executors" value="{{ current_user.id }}">
+    <div class="alert alert-info">Задача будет создана для вас: {{ current_user.full_name }}.</div>
+  {% endif %}
+
+  <div class="text-end">
     <a href="{{ url_for('activities_page') }}" class="btn btn-secondary">Отмена</a>
-    <button class="btn btn-success">💾 Создать</button>
+    <button type="submit" class="btn btn-success">Создать</button>
   </div>
 </form>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const templateSelect = document.getElementById('activity_template');
+  if (templateSelect) {
+    templateSelect.addEventListener('change', function () {
+      const url = new URL(window.location.href);
+      if (templateSelect.value) url.searchParams.set('template_id', templateSelect.value);
+      else url.searchParams.delete('template_id');
+      window.location.assign(url.toString());
+    });
+  }
+  const checks = Array.from(document.querySelectorAll('.executor-check'));
+  const label = document.getElementById('executorsLabel');
+  const search = document.getElementById('executorsSearch');
+  const options = Array.from(document.querySelectorAll('.executor-option'));
+  const empty = document.getElementById('executorsEmpty');
+  function updateLabel() {
+    const selected = checks.filter(function (item) { return item.checked; }).map(function (item) { return item.nextElementSibling.textContent.trim(); });
+    label.textContent = selected.length ? (selected.length === 1 ? selected[0] : 'Выбрано сотрудников: ' + selected.length) : 'Выберите ответственных';
+  }
+  checks.forEach(function (item) { item.addEventListener('change', updateLabel); });
+  if (search) search.addEventListener('input', function () {
+    const query = search.value.toLowerCase().trim(); let shown = 0;
+    options.forEach(function (item) { const visible = item.dataset.search.includes(query); item.classList.toggle('d-none', !visible); if (visible) shown += 1; });
+    empty.classList.toggle('d-none', shown > 0);
+  });
+});
+</script>
 {% endblock %}
