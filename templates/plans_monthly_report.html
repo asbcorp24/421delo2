@@ -14,6 +14,7 @@
     </div>
     <div class="d-flex gap-2">
       <a href="{{ url_for('plans_list') }}" class="btn btn-outline-info">К планам</a>
+      <a href="{{ url_for('plans_review', month=month_value) }}" class="btn btn-outline-primary screen-only">Проверка планов</a>
       <button type="button" class="btn btn-outline-light" onclick="window.print()">Печать</button>
     </div>
   </div>

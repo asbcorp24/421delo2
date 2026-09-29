@@ -39,6 +39,8 @@ import re
 from flask import current_app
 import time
 import glob
+import urllib.error
+import urllib.request
 from config import SUPERADMIN_LOGIN, SUPERADMIN_PASSWORD,SECRET_PASSPHRASE
 from dotenv import load_dotenv
 import os
@@ -299,11 +301,66 @@ def secure_filename_rus(filename):
     filename = re.sub(r"[^?-??-?A-Za-z0-9._-]", "", filename)
     return filename[:120]
 
+KREUZBERG_URL = os.getenv("KREUZBERG_URL", "http://127.0.0.1:8000").rstrip("/")
+
+
+def extract_text_with_kreuzberg(path):
+    """Extract document text through the local Kreuzberg Docker API."""
+    suffix = Path(path).suffix.lower()
+    supported_suffixes = {
+        ".pdf", ".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp",
+        ".txt", ".docx", ".doc", ".rtf", ".odt", ".xlsx", ".xls", ".pptx",
+    }
+    if suffix not in supported_suffixes:
+        return None
+
+    boundary = "----otd421{}".format(uuid.uuid4().hex)
+    filename = os.path.basename(path)
+    mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    config = json.dumps({"force_ocr": True, "ocr": {"language": "rus"}})
+    try:
+        with open(path, "rb") as source_file:
+            content = source_file.read()
+        body = b"".join((
+            "--{}\r\n".format(boundary).encode(),
+            'Content-Disposition: form-data; name="files"; filename="{}"\r\n'.format(filename).encode("utf-8"),
+            "Content-Type: {}\r\n\r\n".format(mime_type).encode(),
+            content,
+            "\r\n--{}\r\n".format(boundary).encode(),
+            'Content-Disposition: form-data; name="config"\r\n\r\n'.encode(),
+            config.encode("utf-8"),
+            "\r\n--{}\r\n".format(boundary).encode(),
+            'Content-Disposition: form-data; name="output_format"\r\n\r\nplain'.encode(),
+            "\r\n--{}--\r\n".format(boundary).encode(),
+        ))
+        request_to_extract = urllib.request.Request(
+            "{}/extract".format(KREUZBERG_URL),
+            data=body,
+            headers={"Content-Type": "multipart/form-data; boundary={}".format(boundary)},
+            method="POST",
+        )
+        with urllib.request.urlopen(request_to_extract, timeout=180) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        results = payload if isinstance(payload, list) else [payload]
+        recognized_text = "\n\n".join(
+            result.get("content", "").strip()
+            for result in results
+            if isinstance(result, dict) and result.get("content")
+        )
+        return recognized_text.strip() or None
+    except (OSError, ValueError, urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+        print("Kreuzberg OCR unavailable: {}".format(exc))
+        return None
+
+
 def extract_text_from_file(path):
     ext = os.path.splitext(path)[-1].lower().strip(".")
     text = ""
     try:
-        if ext in ("jpg", "jpeg", "png"):
+        kreuzberg_text = extract_text_with_kreuzberg(path)
+        if kreuzberg_text:
+            return kreuzberg_text
+        if ext in ("jpg", "jpeg", "png", "bmp", "tif", "tiff", "webp"):
             text = pytesseract.image_to_string(Image.open(path), lang="rus+eng")
         elif ext == "pdf":
             text_parts = []
@@ -1155,7 +1212,25 @@ def dashboard():
     from datetime import date, datetime, timedelta
     normalize_activity_statuses()
     my_acts = Activity.query.filter_by(owner_id=current_user.id).count()
-    my_letters = Letter.query.filter_by(author_id=current_user.id).count()
+    memo_source_id = ensure_memo_source()
+    my_letters = (
+        Letter.query
+        .filter(
+            Letter.author_id == current_user.id,
+            Letter.archived_at.is_(None),
+            or_(Letter.source_id.is_(None), Letter.source_id != memo_source_id),
+        )
+        .count()
+    )
+    my_memos = (
+        Letter.query
+        .filter(
+            Letter.author_id == current_user.id,
+            Letter.archived_at.is_(None),
+            Letter.source_id == memo_source_id,
+        )
+        .count()
+    )
     pending_approval = 0
     if current_user.role in ("manager", "admin", "superadmin", "deputy"):
         pending_approval = Activity.query.filter_by(status="done").count()
@@ -1214,6 +1289,7 @@ def dashboard():
         title="Главная",
         my_acts=my_acts,
         my_letters=my_letters,
+        my_memos=my_memos,
         pending_approval=pending_approval,
         dashboard_tasks=dashboard_tasks,
         date_from=start_str,
@@ -1501,6 +1577,7 @@ def activities_page():
     start_str = request.args.get("date_from", first_day.strftime("%Y-%m-%d"))
     end_str = request.args.get("date_to", last_day.strftime("%Y-%m-%d"))
     my_only = request.args.get("my_only") == "1"
+    created_by_me = request.args.get("created_by_me") == "1"
     owner_id = request.args.get("owner_id", "").strip()
     search = request.args.get("search", "").strip()
     selected_status = request.args.get("status", "active_and_not_done").strip() or "active_and_not_done"
@@ -1535,6 +1612,9 @@ def activities_page():
                 q = q.filter(Activity.owner_id == int(owner_id))
             except ValueError:
                 pass
+
+    if created_by_me:
+        q = q.filter(Activity.created_by_id == current_user.id)
 
     q = q.filter(Activity.start_date >= date_from, Activity.start_date <= date_to)
     if selected_status not in {value for value, _label in ACTIVITY_STATUS_FILTERS}:
@@ -1571,6 +1651,7 @@ def activities_page():
         date_from=start_str,
         date_to=end_str,
         my_only=my_only,
+        created_by_me=created_by_me,
         owner_id=owner_id,
         selected_status=selected_status,
         status_filters=ACTIVITY_STATUS_FILTERS,
@@ -2412,6 +2493,7 @@ def letters_page():
     filter_type = request.args.get("filter", "all")
     source_id = (request.args.get("source_id") or "").strip()
     executor_id = (request.args.get("executor_id") or "").strip()
+    author_id = (request.args.get("author_id") or "").strip()
     search = request.args.get("search", "").strip()
     page = request.args.get("page", 1, type=int) or 1
 
@@ -2451,29 +2533,13 @@ def letters_page():
         )
     )
 
-    # === фильтрация по пользователю ===
-    if current_user.role in ("admin", "manager", "superadmin"):
-        if filter_type == "my":
-            q = q.filter(LetterRecipient.user_id == current_user.id)
-        elif filter_type == "dept":
-            q = q.filter(Department.id == current_user.department_id)
-        elif filter_type == "sent":
-            q = q.filter(Letter.author_id == current_user.id)
-    else:
-        if filter_type == "my":
-            q = q.filter(LetterRecipient.user_id == current_user.id)
-        elif filter_type == "dept":
-            q = q.filter(Department.id == current_user.department_id)
-        elif filter_type == "sent":
-            q = q.filter(Letter.author_id == current_user.id)
-        else:
-            q = q.filter(
-                or_(
-                    LetterRecipient.user_id == current_user.id,
-                    Department.id == current_user.department_id,
-                    Letter.author_id == current_user.id,
-                )
-            )
+    # По умолчанию журнал общий. Ограничения применяются только по явному фильтру.
+    if filter_type == "my":
+        q = q.filter(LetterRecipient.user_id == current_user.id)
+    elif filter_type == "dept":
+        q = q.filter(Department.id == current_user.department_id)
+    elif filter_type == "sent":
+        q = q.filter(Letter.author_id == current_user.id)
 
     # === фильтрация по датам ===
     q = q.filter(
@@ -2518,6 +2584,12 @@ def letters_page():
         except ValueError:
             executor_id = ""
 
+    if author_id:
+        try:
+            q = q.filter(Letter.author_id == int(author_id))
+        except ValueError:
+            author_id = ""
+
     pagination = q.distinct().order_by(
         Letter.letter_date.desc().nullslast(),
         Letter.created_at.desc(),
@@ -2540,6 +2612,7 @@ def letters_page():
     filter_users = []
     if current_user.role in ("admin", "manager", "superadmin"):
         filter_users = User.query.filter_by(is_approved=True).order_by(User.full_name).all()
+    authors = User.query.filter_by(is_approved=True).order_by(User.full_name).all()
 
     return render_template(
         "letters.html",
@@ -2553,6 +2626,8 @@ def letters_page():
         filter_users=filter_users,
         source_id=source_id,
         executor_id=executor_id,
+        author_id=author_id,
+        authors=authors,
         search=search,
         pagination=pagination,
         executor_lookup=executor_lookup,
@@ -2685,6 +2760,12 @@ def add_letter():
 @login_required
 def upload_letter_document(letter_id: int):
     letter = Letter.query.get_or_404(letter_id)
+    is_memo = letter.source_id == ensure_memo_source()
+    can_edit = letter.author_id == current_user.id or current_user.role in ("admin", "superadmin")
+    if is_memo and current_user.role == "manager":
+        can_edit = True
+    if not can_edit:
+        abort(403)
     f = request.files.get("file")
 
     if not f or not f.filename:
@@ -2742,31 +2823,8 @@ def letter_view(letter_id):
         if source_obj:
             source_lookup[source_obj.id] = source_obj
 
-    recipient_ids = [r.user_id for r in le.recipients]
     is_author = le.author_id == current_user.id
-    is_recipient = current_user.id in recipient_ids
     is_admin = current_user.role in ("admin", "superadmin")
-
-    # ✅ Проверяем, выдан ли доступ через DocumentAccess
-    has_custom_access = (
-        DocumentAccess.query.filter_by(
-            doc_type="letter",
-            doc_id=le.id,
-            user_id=current_user.id
-        ).count() > 0
-    )
-
-    # 🔒 Финальная проверка всех возможных прав
-    has_access = is_author or is_recipient or is_admin or has_custom_access
-
-    if not has_access:
-        author = User.query.get(le.author_id)
-        return render_template(
-            "letter_request_access.html",
-            title="Доступ к письму запрещён",
-            le=le,
-            author=author,
-        ), 403
 
     can_edit = is_author or is_admin
 
@@ -2836,27 +2894,8 @@ def memo_view(memo_id):
     if memo.source_id != ensure_memo_source():
         abort(404)
 
-    recipient_ids = [r.user_id for r in memo.recipients]
     is_author = memo.author_id == current_user.id
-    is_recipient = current_user.id in recipient_ids
     is_privileged = current_user.role in ("admin", "superadmin", "manager")
-    has_custom_access = (
-        DocumentAccess.query.filter_by(
-            doc_type="letter",
-            doc_id=memo.id,
-            user_id=current_user.id,
-        ).count() > 0
-    )
-
-    has_access = is_author or is_recipient or is_privileged or has_custom_access
-    if not has_access:
-        author = User.query.get(memo.author_id)
-        return render_template(
-            "letter_request_access.html",
-            title="Доступ к служебной записке запрещён",
-            le=memo,
-            author=author,
-        ), 403
 
     executor_lookup = {}
     if getattr(memo, "executor_id", None):
@@ -2946,11 +2985,13 @@ def memos_archive_page():
 
 
 @app.route("/memos/<int:memo_id>/edit", methods=["GET", "POST"])
-@role_required("admin", "superadmin")
+@login_required
 def edit_memo(memo_id):
     memo = Letter.query.get_or_404(memo_id)
     if memo.source_id != ensure_memo_source():
         abort(404)
+    if memo.author_id != current_user.id and current_user.role not in ("admin", "superadmin", "manager"):
+        abort(403)
     departments = Department.query.order_by(Department.name).all()
     users = User.query.filter_by(is_approved=True).order_by(User.full_name).all()
     if request.method == "POST":
@@ -3138,6 +3179,7 @@ def memos_page():
     end_str = request.args.get("date_to", last_day.strftime("%Y-%m-%d"))
     department_id = (request.args.get("department_id") or "").strip()
     executor_id = (request.args.get("executor_id") or "").strip()
+    author_id = (request.args.get("author_id") or "").strip()
     search = request.args.get("search", "").strip()
     page = request.args.get("page", 1, type=int) or 1
 
@@ -3159,16 +3201,6 @@ def memos_page():
         .outerjoin(Letter.departments)
         .filter(Letter.source_id == memo_source_id, Letter.archived_at.is_(None))
     )
-
-    privileged_roles = ("admin", "manager", "superadmin")
-    if current_user.role not in privileged_roles:
-        q = q.filter(
-            or_(
-                Letter.author_id == current_user.id,
-                Department.id == current_user.department_id,
-                LetterRecipient.user_id == current_user.id,
-            )
-        )
 
     q = q.filter(
         or_(
@@ -3195,6 +3227,12 @@ def memos_page():
         except ValueError:
             executor_id = ""
 
+    if author_id:
+        try:
+            q = q.filter(Letter.author_id == int(author_id))
+        except ValueError:
+            author_id = ""
+
     if search:
         like_pattern = f"%{search}%"
         q = q.filter(
@@ -3219,8 +3257,10 @@ def memos_page():
     if executor_ids:
         executor_lookup = {user.id: user for user in User.query.filter(User.id.in_(executor_ids)).all()}
     filter_users = []
+    privileged_roles = ("admin", "manager", "superadmin")
     if current_user.role in privileged_roles:
         filter_users = User.query.filter_by(is_approved=True).order_by(User.full_name).all()
+    authors = User.query.filter_by(is_approved=True).order_by(User.full_name).all()
 
     return render_template(
         "memos.html",
@@ -3232,6 +3272,8 @@ def memos_page():
         department_lookup=department_lookup,
         department_id=department_id,
         executor_id=executor_id,
+        author_id=author_id,
+        authors=authors,
         executor_lookup=executor_lookup,
         filter_users=filter_users,
         search=search,
@@ -4389,6 +4431,8 @@ def delete_activity_value(activity_id, value_id):
 def save_letter_extras(letter_id):
     import json
     le = Letter.query.get_or_404(letter_id)
+    if le.author_id != current_user.id and current_user.role not in ("admin", "superadmin"):
+        abort(403)
     data = request.get_json()
     new_extras = data.get("extras", [])
 
@@ -4493,6 +4537,64 @@ def build_plan_department_rows(items):
     return department_rows, executor_rows
 
 
+def deputy_can_review_plan(plan, user=None):
+    """План доступен заместителю, если он относится к его отделу.
+
+    План может быть создан сотрудником до добавления пунктов, поэтому учитываем
+    и отдел автора, и исполнителей пунктов. Чужие планы при этом не открываются.
+    """
+    user = user or current_user
+    if getattr(user, "role", None) != "deputy" or not getattr(user, "department_id", None):
+        return False
+    creator = getattr(plan, "creator", None)
+    if creator is not None and creator.department_id == user.department_id:
+        return True
+    return any(
+        item.executor is not None and item.executor.department_id == user.department_id
+        for item in plan.items
+    )
+
+
+class ListPagination:
+    """Small pagination adapter for a permission-filtered in-memory collection."""
+    def __init__(self, records, page, per_page=25):
+        self.total = len(records)
+        self.per_page = per_page
+        self.pages = max(1, (self.total + per_page - 1) // per_page)
+        self.page = min(max(1, page), self.pages)
+        first = (self.page - 1) * per_page
+        self.items = records[first:first + per_page]
+
+    @property
+    def has_prev(self):
+        return self.page > 1
+
+    @property
+    def prev_num(self):
+        return self.page - 1
+
+    @property
+    def has_next(self):
+        return self.page < self.pages
+
+    @property
+    def next_num(self):
+        return self.page + 1
+
+    def iter_pages(self, left_edge=1, left_current=2, right_current=2, right_edge=1):
+        last = 0
+        for number in range(1, self.pages + 1):
+            if (
+                number <= left_edge
+                or number > self.pages - right_edge
+                or self.page - left_current <= number <= self.page + right_current
+            ):
+                if last + 1 != number:
+                    yield None
+                yield number
+                last = number
+
+
 @app.route("/plans", methods=["GET", "POST"])
 @login_required
 def plans_list():
@@ -4501,8 +4603,13 @@ def plans_list():
     # --- фильтрация по дате ---
     start_str = request.args.get("date_from")
     end_str = request.args.get("date_to")
+    selected_executor_id = (request.args.get("executor_id") or "").strip()
+    page = request.args.get("page", 1, type=int) or 1
 
-    q = Plan.query
+    q = Plan.query.options(
+        joinedload(Plan.creator),
+        joinedload(Plan.items).joinedload(PlanItem.executor),
+    )
 
     if start_str:
         try:
@@ -4519,10 +4626,36 @@ def plans_list():
             pass
 
     is_manager = current_user.role in ("admin", "superadmin")
-    if not is_manager:
+    is_deputy = current_user.role == "deputy"
+    filter_users = []
+    if is_manager:
+        filter_users = User.query.filter_by(is_approved=True).order_by(User.full_name).all()
+    elif is_deputy and current_user.department_id:
+        q = q.filter(or_(
+            Plan.creator.has(User.department_id == current_user.department_id),
+            Plan.items.any(PlanItem.executor.has(User.department_id == current_user.department_id)),
+        ))
+        filter_users = User.query.filter_by(
+            is_approved=True, department_id=current_user.department_id
+        ).order_by(User.full_name).all()
+    else:
         q = q.filter(Plan.items.any(PlanItem.executor_id == current_user.id))
 
+    if selected_executor_id:
+        try:
+            executor_id = int(selected_executor_id)
+            if any(user.id == executor_id for user in filter_users):
+                q = q.filter(Plan.items.any(PlanItem.executor_id == executor_id))
+            else:
+                selected_executor_id = ""
+        except ValueError:
+            selected_executor_id = ""
+
     plans = q.order_by(Plan.start_date.desc(), Plan.id.desc()).all()
+    if is_deputy:
+        plans = [plan for plan in plans if deputy_can_review_plan(plan)]
+    pagination = ListPagination(plans, page, per_page=25)
+    plans = pagination.items
     plan_summary = {}
     for plan in plans:
         item_counts = {status: 0 for status in PLAN_ITEM_STATUSES}
@@ -4531,8 +4664,61 @@ def plans_list():
         plan_summary[plan.id] = item_counts
     return render_template(
         "plans.html", title="Планы", plans=plans, date_from=start_str, date_to=end_str,
-        plan_summary=plan_summary, is_manager=is_manager,
+        plan_summary=plan_summary, is_manager=is_manager, is_deputy=is_deputy,
+        can_review_plans=is_manager or is_deputy, filter_users=filter_users,
+        selected_executor_id=selected_executor_id, deadline_options=PLAN_DEADLINES,
+        pagination=pagination,
     )
+
+
+@app.get("/plans/review")
+@role_required("admin", "superadmin", "deputy")
+def plans_review():
+    """Рабочее место администратора для принятия месячных планов."""
+    month_value = (request.args.get("month") or dt.date.today().strftime("%Y-%m")).strip()
+    status = (request.args.get("status") or "submitted").strip()
+    period = get_plan_period(month_value)
+    if not period:
+        flash("Выберите корректный месяц.", "warning")
+        return redirect(url_for("plans_review"))
+    if status not in {"all", "submitted", "revision", "approved"}:
+        status = "submitted"
+
+    period_start, period_end = period
+    query = (
+        Plan.query.options(
+            joinedload(Plan.creator),
+            joinedload(Plan.items).joinedload(PlanItem.executor),
+            joinedload(Plan.items).joinedload(PlanItem.linked_activity),
+        )
+        .filter(Plan.start_date <= period_end, Plan.end_date >= period_start)
+    )
+    if status != "all":
+        query = query.filter(Plan.approval_status == status)
+    plans = query.order_by(Plan.created_at.desc(), Plan.id.desc()).all()
+    if current_user.role == "deputy":
+        plans = [plan for plan in plans if deputy_can_review_plan(plan)]
+
+    return render_template(
+        "plans_review.html",
+        title="Проверка планов",
+        plans=plans,
+        month_value=month_value,
+        selected_status=status,
+        deadline_options=PLAN_DEADLINES,
+        get_plan_status_meta=plan_item_status_meta,
+    )
+
+
+def plan_action_redirect(plan):
+    """После действия на странице проверки сохраняем выбранный фильтр."""
+    if request.form.get("return_to") == "review":
+        values = {"month": request.form.get("month") or plan.start_date.strftime("%Y-%m")}
+        status = request.form.get("review_status")
+        if status:
+            values["status"] = status
+        return redirect(url_for("plans_review", **values))
+    return redirect(url_for("plan_detail", plan_id=plan.id))
 
 
 @app.route("/plans/create", methods=["GET", "POST"])
@@ -4609,11 +4795,12 @@ def plan_create():
 def plan_detail(plan_id):
     plan = Plan.query.get_or_404(plan_id)
     is_manager = current_user.role in ("admin", "superadmin")
+    can_review = is_manager or deputy_can_review_plan(plan)
     own_items = [item for item in plan.items if item.executor_id == current_user.id]
     is_creator = plan.created_by == current_user.id
-    if not is_manager and not own_items and not is_creator:
+    if not can_review and not own_items and not is_creator:
         abort(403)
-    items = plan.items if is_manager else own_items
+    items = plan.items if can_review else own_items
     users = User.query.filter_by(is_approved=True).order_by(User.full_name).all() if is_manager else []
     task_owner_ids = {item.executor_id for item in items}
     available_tasks = (
@@ -4624,7 +4811,7 @@ def plan_detail(plan_id):
     )
     return render_template(
         "plan_detail.html", title="План", plan=plan, items=items, users=users,
-        is_manager=is_manager, is_creator=is_creator,
+        is_manager=is_manager, can_review=can_review, is_creator=is_creator,
         can_edit_definition=is_manager or (is_creator and plan.approval_status != "approved"),
         deadline_options=PLAN_DEADLINES,
         status_options=PLAN_ITEM_STATUSES, get_plan_status_meta=plan_item_status_meta,
@@ -4735,33 +4922,37 @@ def plan_delete(plan_id):
 
 
 @app.post("/plans/<int:plan_id>/approve")
-@role_required("admin", "superadmin")
+@role_required("admin", "superadmin", "deputy")
 def plan_approve(plan_id):
     plan = Plan.query.get_or_404(plan_id)
+    if current_user.role == "deputy" and not deputy_can_review_plan(plan):
+        abort(403)
     plan.approval_status = "approved"
     plan.approved_by_id = current_user.id if current_user.id != -1 else None
     plan.approved_at = dt.datetime.utcnow()
     plan.revision_comment = None
     db.session.commit()
     flash("План принят. Исполнитель теперь может указывать только результат выполнения.", "success")
-    return redirect(url_for("plan_detail", plan_id=plan.id))
+    return plan_action_redirect(plan)
 
 
 @app.post("/plans/<int:plan_id>/return-for-revision")
-@role_required("admin", "superadmin")
+@role_required("admin", "superadmin", "deputy")
 def plan_return_for_revision(plan_id):
     plan = Plan.query.get_or_404(plan_id)
+    if current_user.role == "deputy" and not deputy_can_review_plan(plan):
+        abort(403)
     comment = (request.form.get("revision_comment") or "").strip()
     if not comment:
         flash("Укажите, что требуется доработать.", "warning")
-        return redirect(url_for("plan_detail", plan_id=plan.id))
+        return plan_action_redirect(plan)
     plan.approval_status = "revision"
     plan.approved_by_id = None
     plan.approved_at = None
     plan.revision_comment = comment
     db.session.commit()
     flash("План возвращен на доработку.", "warning")
-    return redirect(url_for("plan_detail", plan_id=plan.id))
+    return plan_action_redirect(plan)
 
 
 @app.post("/plans/<int:plan_id>/resubmit")

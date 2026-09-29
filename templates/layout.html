@@ -414,8 +414,11 @@
       <li><a class="dropdown-item" href="{{ url_for('dashboard') }}">🏠 Главная</a></li>
       <li><a class="dropdown-item" href="{{ url_for('activities_page') }}">📋 Задачи</a></li>
       <li><a class="dropdown-item" href="{{ url_for('letters_page') }}">📨 Письма</a></li>
-       <li><a class="dropdown-item" href="{{ url_for('memos_page') }}">📝 Служебные записки</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('memos_page') }}">📝 Служебные записки</a></li>
       <li><a class="dropdown-item" href="{{ url_for('plans_list') }}">📅 Планы и отчеты</a></li>
+      {% if current_user.role in ['admin', 'superadmin', 'deputy'] %}
+      <li><a class="dropdown-item" href="{{ url_for('plans_review') }}">✅ Проверка планов</a></li>
+      {% endif %}
       <li><a class="dropdown-item" href="{{ url_for('deadlines_calendar') }}">🗓 Календарь сроков</a></li>
       <li><hr class="dropdown-divider"></li>
       <li><a class="dropdown-item" href="{{ url_for('help_page') }}"><i class="bi bi-question-circle"></i> Справка</a></li>
@@ -465,6 +468,7 @@
        <li><a class="dropdown-item" href="{{ url_for('admin_backups') }}">💾 Резервные копии БД</a></li>
        <li><a class="dropdown-item" href="{{ url_for('value_templates_page') }}">🧩 Шаблоны значений</a></li>
       <li><a class="dropdown-item" href="{{ url_for('plans_list') }}">📅 Планы</a></li>
+      <li><a class="dropdown-item" href="{{ url_for('plans_review') }}">✅ Проверка планов</a></li>
       <li><a class="dropdown-item" href="/plans/monthly-report">🧾 Отчет по планам</a></li>
       <li><a class="dropdown-item" href="{{ url_for('manage_reports') }}">📊 Отчёты</a></li>
       <li><a class="dropdown-item" href="{{ url_for('activities_audit') }}">🧾 Аудит задач</a></li>
@@ -529,7 +533,7 @@
 
 <div id="userNotificationToastContainer" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;"></div>
 
-<div class="container">
+<div class="container {% block main_container_class %}{% endblock %}">
   {% with messages = get_flashed_messages() %}
     {% if messages %}
       <div class="alert alert-info alert-dismissible fade show">

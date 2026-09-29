@@ -48,6 +48,7 @@
       {{ date_from if date_from else 'не задан' }} - {{ date_to if date_to else 'не задан' }}
       {% if search %}| Поиск: {{ search }}{% endif %}
       {% if my_only %}| Режим: свои задачи
+      {% elif created_by_me %}| Режим: созданные мной
       {% elif owner_id and filter_users %}| Пользователь: {{ filter_users | selectattr('id', 'equalto', owner_id|int) | map(attribute='full_name') | list | first }}
       {% else %}| Режим: все задачи
       {% endif %}
@@ -121,6 +122,13 @@
   {% endif %}
 
   <div class="col-auto">
+    <div class="form-check mt-4 pt-2">
+      <input class="form-check-input" type="checkbox" value="1" id="created_by_me" name="created_by_me" {% if created_by_me %}checked{% endif %}>
+      <label class="form-check-label" for="created_by_me">Созданные мной</label>
+    </div>
+  </div>
+
+  <div class="col-auto">
     <button type="submit" class="btn btn-primary">Фильтровать</button>
     <a href="{{ url_for('activities_page') }}" class="btn btn-secondary">Сбросить</a>
   </div>
@@ -178,6 +186,7 @@
 {% if search %}{% set _ = pagination_params.update({'search': search}) %}{% endif %}
 {% if owner_id %}{% set _ = pagination_params.update({'owner_id': owner_id}) %}{% endif %}
 {% if my_only %}{% set _ = pagination_params.update({'my_only': '1'}) %}{% endif %}
+{% if created_by_me %}{% set _ = pagination_params.update({'created_by_me': '1'}) %}{% endif %}
 {% set pagination_endpoint = 'activities_page' %}
 {% include 'partials/_pagination.html' %}
 <div class="official-footer mt-4" style="color:#000;">Ответственный за ведение журнала: __________________ /____________/ &nbsp;&nbsp;&nbsp; Дата: {{ now().strftime('%d.%m.%Y') }}</div>

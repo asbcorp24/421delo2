@@ -120,3 +120,26 @@ curl -H "Authorization: Bearer YOUR_API_TOKEN" \
 ```json
 {"status":"ok","api_version":"v1","server_time":"2026-09-17T12:00:00Z"}
 ```
+# Распознавание документов Kreuzberg
+
+Для извлечения текста из PDF, изображений и офисных документов приложение использует
+локальный HTTP-сервис Kreuzberg. При загрузке файла отправляется запрос `POST /extract`
+с русским OCR и параметром `force_ocr=true`.
+
+Из PowerShell, находясь в папке проекта, запустите контейнер:
+
+```powershell
+docker rm -f kreuzberg_service
+docker run -d --name kreuzberg_service -p 8000:8000 ghcr.io/kreuzberg-dev/kreuzberg-full:latest serve -H 0.0.0.0 -p 8000
+```
+
+Проверка готовности:
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:8000/health
+```
+
+По умолчанию приложение обращается к `http://127.0.0.1:8000`. Для другого адреса
+задайте переменную окружения `KREUZBERG_URL`, например `http://192.168.0.187:8000`.
+Если сервис временно недоступен, загрузка документа продолжится с резервным локальным
+распознаванием.

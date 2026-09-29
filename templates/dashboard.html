@@ -3,22 +3,29 @@
 <h3>Главная панель</h3>
 
 <div class="row mt-3">
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="card shadow-sm p-3">
       <h5>Мои задачи: {{ my_acts }}</h5>
       <a href="{{ url_for('activities_page') }}" class="btn btn-outline-primary btn-sm mt-2">Открыть</a>
     </div>
   </div>
 
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="card shadow-sm p-3">
       <h5>Мои письма: {{ my_letters }}</h5>
       <a href="{{ url_for('letters_page') }}" class="btn btn-outline-primary btn-sm mt-2">Открыть</a>
     </div>
   </div>
 
+  <div class="col-md-3">
+    <div class="card shadow-sm p-3">
+      <h5>Мои служебные: {{ my_memos }}</h5>
+      <a href="{{ url_for('memos_page') }}" class="btn btn-outline-primary btn-sm mt-2">Открыть</a>
+    </div>
+  </div>
+
   {% if current_user.role in ['manager', 'admin', 'superadmin'] %}
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="card shadow-sm p-3">
       <h5>Ждут утверждения: {{ pending_approval }}</h5>
       <a href="{{ url_for('activities_page') }}" class="btn btn-outline-warning btn-sm mt-2">Посмотреть</a>

@@ -47,6 +47,7 @@
       Период: {{ date_from if date_from else 'не задан' }} - {{ date_to if date_to else 'не задан' }}
       {% if department_id %}| Отдел: {{ departments | selectattr('id', 'equalto', department_id|int) | map(attribute='name') | list | first }}{% endif %}
       {% if executor_id and filter_users %}| Исполнитель: {{ filter_users | selectattr('id', 'equalto', executor_id|int) | map(attribute='full_name') | list | first }}{% endif %}
+      {% if author_id %}| Автор: {{ authors | selectattr('id', 'equalto', author_id|int) | map(attribute='full_name') | list | first }}{% endif %}
       {% if search %}| Поиск: {{ search }}{% endif %}
     </div>
   </div>
@@ -100,6 +101,16 @@
     </select>
   </div>
   {% endif %}
+
+  <div class="col-auto">
+    <label for="author_id" class="form-label">Автор</label>
+    <select id="author_id" name="author_id" class="form-select">
+      <option value="">Все</option>
+      {% for user in authors %}
+      <option value="{{ user.id }}" {% if author_id == user.id|string %}selected{% endif %}>{{ user.full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
 
   <div class="col-auto">
     <button type="submit" class="btn btn-primary">Фильтровать</button>
@@ -159,6 +170,7 @@
 {% set pagination_params = {'date_from': date_from, 'date_to': date_to} %}
 {% if department_id %}{% set _ = pagination_params.update({'department_id': department_id}) %}{% endif %}
 {% if executor_id %}{% set _ = pagination_params.update({'executor_id': executor_id}) %}{% endif %}
+{% if author_id %}{% set _ = pagination_params.update({'author_id': author_id}) %}{% endif %}
 {% if search %}{% set _ = pagination_params.update({'search': search}) %}{% endif %}
 {% set pagination_endpoint = 'memos_page' %}
 {% include 'partials/_pagination.html' %}

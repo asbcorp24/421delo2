@@ -1,0 +1,84 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h3 class="mb-1">Проверка планов</h3>
+      <div class="text-muted">Содержимое месячных планов и решения администратора без перехода в карточку.</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('plans_monthly_report', month=month_value) }}" class="btn btn-outline-warning">Сводный отчет</a>
+      <a href="{{ url_for('plans_list') }}" class="btn btn-outline-secondary">К планам</a>
+    </div>
+  </div>
+
+  <form method="get" class="card bg-dark border-info shadow-sm mb-4">
+    <div class="card-body row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Месяц</label>
+        <input type="month" name="month" class="form-control" value="{{ month_value }}" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Состояние</label>
+        <select name="status" class="form-select">
+          <option value="submitted" {% if selected_status == 'submitted' %}selected{% endif %}>Ожидают принятия</option>
+          <option value="revision" {% if selected_status == 'revision' %}selected{% endif %}>На доработке</option>
+          <option value="approved" {% if selected_status == 'approved' %}selected{% endif %}>Приняты</option>
+          <option value="all" {% if selected_status == 'all' %}selected{% endif %}>Все планы</option>
+        </select>
+      </div>
+      <div class="col-md-auto"><button class="btn btn-primary">Показать</button></div>
+    </div>
+  </form>
+
+  {% for plan in plans %}
+  <article class="card bg-dark border-{% if plan.approval_status == 'submitted' %}warning{% elif plan.approval_status == 'revision' %}danger{% else %}success{% endif %} shadow-sm mb-3">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <strong>{{ plan.plan_text }}</strong>
+        <span class="text-muted ms-2">{{ plan.start_date.strftime('%d.%m.%Y') }} - {{ plan.end_date.strftime('%d.%m.%Y') }}</span>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        {% if plan.approval_status == 'approved' %}<span class="badge bg-success">Принят</span>{% elif plan.approval_status == 'revision' %}<span class="badge bg-danger">На доработке</span>{% else %}<span class="badge bg-warning text-dark">Ожидает принятия</span>{% endif %}
+        <a href="{{ url_for('plan_detail', plan_id=plan.id) }}" class="btn btn-sm btn-outline-info">Открыть</a>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="row small mb-3">
+        <div class="col-md-5"><span class="text-muted">Создал:</span> {{ plan.creator.full_name if plan.creator else 'Удаленный пользователь' }}</div>
+        <div class="col-md-3"><span class="text-muted">Создан:</span> {{ plan.created_at.strftime('%d.%m.%Y %H:%M') if plan.created_at else '-' }}</div>
+        <div class="col-md-4"><span class="text-muted">Пунктов:</span> {{ plan.items|length }}</div>
+      </div>
+      {% if plan.revision_comment %}<div class="alert alert-danger py-2 mb-3"><b>Замечание:</b> {{ plan.revision_comment }}</div>{% endif %}
+      <div class="table-responsive">
+        <table class="table table-dark table-sm align-middle mb-3">
+          <thead><tr><th>№</th><th>Исполнитель</th><th>Мероприятие</th><th>Срок</th><th>Связанная задача</th><th>Результат</th></tr></thead>
+          <tbody>{% for item in plan.items %}
+            {% set meta = get_plan_status_meta(item.status) %}
+            <tr>
+              <td>{{ item.position }}</td><td>{{ item.executor.full_name if item.executor else '-' }}</td><td>{{ item.task_text }}</td>
+              <td>{% if item.deadline_kind == 'date' and item.deadline_date %}До {{ item.deadline_date.strftime('%d.%m.%Y') }}{% else %}{{ deadline_options.get(item.deadline_kind, item.deadline_kind) }}{% endif %}</td>
+              <td>{% if item.linked_activity %}<a href="{{ url_for('activity_view', activity_id=item.linked_activity.id) }}">#{{ item.linked_activity.id }} {{ item.linked_activity.title }}</a>{% else %}-{% endif %}</td>
+              <td><span class="badge {{ meta.class }}">{{ meta.label }}</span></td>
+            </tr>
+          {% else %}<tr><td colspan="6" class="text-center text-muted py-3">В плане нет пунктов.</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        {% if plan.approval_status != 'approved' %}
+        <form method="post" action="{{ url_for('plan_approve', plan_id=plan.id) }}">
+          <input type="hidden" name="return_to" value="review"><input type="hidden" name="month" value="{{ month_value }}"><input type="hidden" name="review_status" value="{{ selected_status }}">
+          <button class="btn btn-success">Принять план</button>
+        </form>
+        {% endif %}
+        <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#revisionModal{{ plan.id }}">Вернуть на доработку</button>
+      </div>
+    </div>
+  </article>
+
+  <div class="modal fade" id="revisionModal{{ plan.id }}" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form method="post" action="{{ url_for('plan_return_for_revision', plan_id=plan.id) }}" class="modal-content"><div class="modal-header"><h5 class="modal-title">Вернуть план на доработку</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><label class="form-label">Что необходимо исправить</label><textarea name="revision_comment" class="form-control" rows="4" required placeholder="Опишите замечания для автора плана"></textarea><input type="hidden" name="return_to" value="review"><input type="hidden" name="month" value="{{ month_value }}"><input type="hidden" name="review_status" value="{{ selected_status }}"></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button><button class="btn btn-danger">Вернуть на доработку</button></div></form></div></div>
+  {% else %}
+  <div class="card bg-dark border-secondary"><div class="card-body text-center text-muted py-5">За выбранный месяц планов с таким состоянием нет.</div></div>
+  {% endfor %}
+</div>
+{% endblock %}
