@@ -2,7 +2,7 @@
 
 ## API для внешней CRM
 
-Приложение предоставляет read-only API для передачи задач, планов и служебных записок во внешнюю CRM.
+Приложение предоставляет API для чтения и учёта задач, планов и служебных записок во внешней CRM.
 
 ### Подготовка
 
@@ -41,7 +41,13 @@ X-API-Key: YOUR_API_TOKEN
 | --- | --- | --- |
 | `GET` | `/api/crm/v1/health` | Проверка подключения |
 | `GET` | `/api/crm/v1/tasks` | Задачи |
+| `POST` | `/api/crm/v1/tasks` | Создать задачу |
+| `PATCH` | `/api/crm/v1/tasks/<id>` | Изменить задачу |
 | `GET` | `/api/crm/v1/plans` | Планы и строки планов |
+| `POST` | `/api/crm/v1/plans` | Создать план с пунктами |
+| `PATCH` | `/api/crm/v1/plans/<id>` | Изменить план |
+| `POST` | `/api/crm/v1/plans/<id>/items` | Добавить пункт плана |
+| `PATCH` | `/api/crm/v1/plans/<id>/items/<item_id>` | Изменить пункт плана |
 | `GET` | `/api/crm/v1/memos` | Служебные записки |
 
 Все списочные ресурсы возвращают объект:
@@ -90,6 +96,40 @@ curl -H "Authorization: Bearer YOUR_API_TOKEN" \
 }
 ```
 
+### Запись задач
+
+Все операции записи принимают только JSON (`Content-Type: application/json`). Создание задачи требует
+`title`, `type_id`, `owner_id` и `start_date`. Исполнитель должен быть активным и подтверждённым.
+Даты задач передаются в ISO 8601: `2026-09-30` или `2026-09-30T09:00:00`.
+
+```bash
+curl -X POST "http://server:5001/api/crm/v1/tasks" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Подготовить данные для CRM",
+    "description": "Передать сведения по плану",
+    "type_id": 1,
+    "owner_id": 12,
+    "start_date": "2026-10-01",
+    "end_date": "2026-10-05",
+    "priority": 4,
+    "complexity_level": 3,
+    "status": "in_progress"
+  }'
+```
+
+Для изменения передайте только нужные поля методом `PATCH`, например:
+
+```bash
+curl -X PATCH "http://server:5001/api/crm/v1/tasks/53" \
+  -H "X-API-Key: YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"postponed","postponed_to":"2026-10-10","status_comment":"Ожидаются входные данные"}'
+```
+
+Каждое изменение задачи через API заносится в журнал изменений с пометкой внешней CRM.
+
 ### Планы
 
 ```bash
@@ -98,6 +138,32 @@ curl -H "X-API-Key: YOUR_API_TOKEN" \
 ```
 
 Каждый план содержит период, текст, статус утверждения, автора и массив `items`. Строка плана содержит исполнителя, срок (`deadline_kind`, `deadline_date`), статус выполнения, комментарий и дату выполнения.
+
+### Запись планов
+
+При создании плана обязательны `text`, `start_date`, `end_date` и непустой массив `items`.
+У каждого пункта обязательны `text` и `executor_id`; для `deadline_kind: "date"` также требуется
+`deadline_date`. Допустимые сроки: `month`, `q1`, `q2`, `q3`, `q4`, `date`.
+
+```bash
+curl -X POST "http://server:5001/api/crm/v1/plans" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "План отдела на октябрь",
+    "start_date": "2026-10-01",
+    "end_date": "2026-10-31",
+    "created_by_id": 12,
+    "items": [{
+      "text": "Подготовить ежемесячный отчет",
+      "executor_id": 12,
+      "deadline_kind": "date",
+      "deadline_date": "2026-10-25"
+    }]
+  }'
+```
+
+API не удаляет задачи и планы. Удаление остаётся доступным только через веб-интерфейс администратора.
 
 ### Служебные записки
 

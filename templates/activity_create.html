@@ -44,6 +44,18 @@
   </div>
 
   <div class="mb-3">
+    <label class="form-label">Уровень сложности</label>
+    <select name="complexity_level" class="form-select">
+      <option value="1">1 - простая</option>
+      <option value="2">2 - базовая</option>
+      <option value="3" selected>3 - средняя</option>
+      <option value="4">4 - высокая</option>
+      <option value="5">5 - критическая</option>
+    </select>
+    <div class="form-text">Определяет норму рабочих часов в день и расчёт трудозатрат.</div>
+  </div>
+
+  <div class="mb-3">
     <label class="form-label">Описание</label>
     <textarea name="description" class="form-control" rows="3">{{ selected_template.description if selected_template else '' }}</textarea>
   </div>

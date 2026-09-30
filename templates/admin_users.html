@@ -23,7 +23,7 @@
         <select name="department_id" class="form-select">
           <option value="">-- не указан --</option>
           {% for d in deps %}
-          <option value="{{ d.id }}">{{ d.name }}</option>
+          <option value="{{ d.id }}">{{ d.workshop.name if d.workshop else 'Без цеха' }} / {{ d.name }}</option>
           {% endfor %}
         </select>
       </div>
@@ -50,7 +50,7 @@
 <table class="table table-striped">
   <thead>
     <tr>
-      <th>ID</th><th>ФИО</th><th>Логин</th><th>Отдел</th><th>Роль</th><th>Подтверждён</th><th></th>
+      <th>ID</th><th>ФИО</th><th>Логин</th><th>Цех</th><th>Отдел</th><th>Роль</th><th>Подтверждён</th><th>Доступ</th><th></th>
     </tr>
   </thead>
   <tbody>
@@ -59,6 +59,7 @@
       <td>{{ u.id }}</td>
       <td>{{ u.full_name }}</td>
       <td>{{ u.username }}</td>
+      <td>{{ u.department.workshop.name if u.department and u.department.workshop else '' }}</td>
       <td>{{ u.department.name if u.department else '' }}</td>
       <td>{{ {'worker': 'Сотрудник', 'deputy': 'Заместитель', 'manager': 'Руководитель', 'admin': 'Администратор'}.get(u.role, u.role) }}</td>
       <td>
@@ -66,6 +67,13 @@
           <span class="badge bg-success">Да</span>
         {% else %}
           <span class="badge bg-warning">Нет</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if u.is_enabled %}
+          <span class="badge bg-success">Активен</span>
+        {% else %}
+          <span class="badge bg-secondary">Отключён</span>
         {% endif %}
       </td>
      <td>
@@ -103,6 +111,14 @@
     <button class="btn btn-sm btn-secondary" onclick="showPassword({{ u.id }}, '{{ u.full_name|e }}')">
       🔑 Пароль
     </button>
+  {% endif %}
+
+  {% if u.id != current_user.id and (current_user.role == 'superadmin' or u.role not in ['admin', 'superadmin']) %}
+    <form method="post" action="{{ url_for('toggle_user_enabled', user_id=u.id) }}" class="d-inline">
+      <button class="btn btn-sm {% if u.is_enabled %}btn-outline-warning{% else %}btn-outline-success{% endif %}">
+        {% if u.is_enabled %}Отключить{% else %}Включить{% endif %}
+      </button>
+    </form>
   {% endif %}
 
   {% if u.role != 'admin' %}

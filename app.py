@@ -39,6 +39,8 @@ import re
 from flask import current_app
 import time
 import glob
+import queue
+import threading
 import urllib.error
 import urllib.request
 from config import SUPERADMIN_LOGIN, SUPERADMIN_PASSWORD,SECRET_PASSPHRASE
@@ -386,6 +388,93 @@ def extract_text_from_file(path):
         text = ""
     return text.strip()
 
+
+# OCR is deliberately processed by one background worker.  This keeps the
+# Kreuzberg container from receiving several large documents at once.
+OCR_QUEUE = queue.Queue()
+OCR_QUEUE_LOCK = threading.Lock()
+OCR_QUEUED_KEYS = set()
+OCR_WORKER_STARTED = False
+
+
+def process_document_ocr(document_kind, document_id):
+    model = ActivityDocument if document_kind == "activity" else LetterDocument
+    document = db.session.get(model, document_id)
+    if not document or document.ocr_status == "completed":
+        return
+
+    document.ocr_status = "processing"
+    document.ocr_error = None
+    document.ocr_started_at = dt.datetime.utcnow()
+    db.session.commit()
+    try:
+        filepath = os.path.join(app.root_path, "static", document.filepath)
+        if not os.path.isfile(filepath):
+            raise FileNotFoundError("Загруженный файл не найден на сервере.")
+        document.doc_rec = extract_text_from_file(filepath)
+        document.ocr_status = "completed"
+        if not document.doc_rec:
+            document.ocr_error = "Текст в документе не обнаружен."
+    except Exception as exc:
+        document.ocr_status = "failed"
+        document.ocr_error = str(exc)[:1000]
+    finally:
+        document.ocr_completed_at = dt.datetime.utcnow()
+        db.session.commit()
+
+
+def ocr_worker():
+    while True:
+        document_kind, document_id = OCR_QUEUE.get()
+        try:
+            with OCR_QUEUE_LOCK:
+                OCR_QUEUED_KEYS.discard((document_kind, document_id))
+            with app.app_context():
+                process_document_ocr(document_kind, document_id)
+        except Exception as exc:
+            print("OCR worker error: {}".format(exc))
+        finally:
+            OCR_QUEUE.task_done()
+
+
+def start_ocr_worker():
+    global OCR_WORKER_STARTED
+    with OCR_QUEUE_LOCK:
+        if OCR_WORKER_STARTED:
+            return
+        OCR_WORKER_STARTED = True
+        worker = threading.Thread(target=ocr_worker, name="document-ocr-worker", daemon=True)
+        worker.start()
+
+    # Resume documents left in the queue by an application restart.
+    with app.app_context():
+        ActivityDocument.query.filter(ActivityDocument.ocr_status == "processing").update(
+            {"ocr_status": "queued"}, synchronize_session=False
+        )
+        LetterDocument.query.filter(LetterDocument.ocr_status == "processing").update(
+            {"ocr_status": "queued"}, synchronize_session=False
+        )
+        db.session.commit()
+        pending_jobs = [
+            ("activity", document.id)
+            for document in ActivityDocument.query.filter_by(ocr_status="queued").all()
+        ] + [
+            ("letter", document.id)
+            for document in LetterDocument.query.filter_by(ocr_status="queued").all()
+        ]
+    for document_kind, document_id in pending_jobs:
+        enqueue_document_ocr(document_kind, document_id)
+
+
+def enqueue_document_ocr(document_kind, document_id):
+    start_ocr_worker()
+    key = (document_kind, document_id)
+    with OCR_QUEUE_LOCK:
+        if key in OCR_QUEUED_KEYS:
+            return
+        OCR_QUEUED_KEYS.add(key)
+        OCR_QUEUE.put(key)
+
 def safe_from_json(value):
     if not value:
         return []
@@ -433,6 +522,14 @@ ACTIVITY_PRIORITY_META = {
     5: {"label": "5 - критический", "class": "bg-danger"},
 }
 
+ACTIVITY_COMPLEXITY_META = {
+    1: {"label": "1 - простая", "class": "bg-secondary", "default_hours": 1},
+    2: {"label": "2 - базовая", "class": "bg-info text-dark", "default_hours": 2},
+    3: {"label": "3 - средняя", "class": "bg-primary", "default_hours": 4},
+    4: {"label": "4 - высокая", "class": "bg-warning text-dark", "default_hours": 6},
+    5: {"label": "5 - критическая", "class": "bg-danger", "default_hours": 8},
+}
+
 
 def get_activity_priority_meta(priority):
     try:
@@ -448,6 +545,42 @@ def parse_activity_priority(raw_priority):
     except (TypeError, ValueError):
         return None
     return priority if priority in ACTIVITY_PRIORITY_META else None
+
+
+def parse_activity_complexity(raw_complexity):
+    try:
+        complexity = int(raw_complexity)
+    except (TypeError, ValueError):
+        return None
+    return complexity if complexity in ACTIVITY_COMPLEXITY_META else None
+
+
+def get_activity_complexity_meta(complexity_level):
+    complexity = parse_activity_complexity(complexity_level) or 3
+    base = ACTIVITY_COMPLEXITY_META[complexity]
+    return {
+        **base,
+        "level": complexity,
+        "daily_hours": get_app_setting_int(
+            "activity_complexity_hours_{}".format(complexity),
+            base["default_hours"],
+        ),
+    }
+
+
+def calculate_activity_effort_hours(activity):
+    """Estimate workload by inclusive weekdays between start and due dates."""
+    if not activity or not activity.start_date or not activity.end_date:
+        return None
+    start_date = activity.start_date.date()
+    end_date = activity.end_date.date()
+    if end_date < start_date:
+        return 0
+    working_days = sum(
+        1 for offset in range((end_date - start_date).days + 1)
+        if (start_date + dt.timedelta(days=offset)).weekday() < 5
+    )
+    return working_days * get_activity_complexity_meta(activity.complexity_level)["daily_hours"]
 
 
 def apply_activity_status_filter(query, selected_status):
@@ -502,12 +635,16 @@ def inject_template_helpers():
     return {
         "get_status_meta": get_activity_status_meta,
         "get_priority_meta": get_activity_priority_meta,
+        "get_complexity_meta": get_activity_complexity_meta,
+        "calculate_effort_hours": calculate_activity_effort_hours,
         "deps": deps,
     }
 
 
 app.jinja_env.globals["get_status_meta"] = get_activity_status_meta
 app.jinja_env.globals["get_priority_meta"] = get_activity_priority_meta
+app.jinja_env.globals["get_complexity_meta"] = get_activity_complexity_meta
+app.jinja_env.globals["calculate_effort_hours"] = calculate_activity_effort_hours
 
 
 @app.get("/manifest.webmanifest")
@@ -538,6 +675,9 @@ def normalize_activity_statuses():
 
 def ensure_runtime_schema():
     with db.engine.begin() as conn:
+        user_cols = {row[1] for row in conn.execute(sql_text("PRAGMA table_info(users)")).fetchall()}
+        if user_cols and "is_enabled" not in user_cols:
+            conn.execute(sql_text("ALTER TABLE users ADD COLUMN is_enabled BOOLEAN NOT NULL DEFAULT 1"))
         conn.execute(sql_text("""
             CREATE TABLE IF NOT EXISTS user_notifications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -575,6 +715,14 @@ def ensure_runtime_schema():
             sql_text("INSERT OR IGNORE INTO app_settings (key, value) VALUES (:key, :value)"),
             {"key": "memo_start_number", "value": "1"},
         )
+        for complexity_level, daily_hours in ((1, 1), (2, 2), (3, 4), (4, 6), (5, 8)):
+            conn.execute(
+                sql_text("INSERT OR IGNORE INTO app_settings (key, value) VALUES (:key, :value)"),
+                {
+                    "key": "activity_complexity_hours_{}".format(complexity_level),
+                    "value": str(daily_hours),
+                },
+            )
         conn.execute(sql_text("""
             CREATE TABLE IF NOT EXISTS letter_sources (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -607,7 +755,16 @@ def ensure_runtime_schema():
             conn.execute(sql_text("ALTER TABLE letter_sources ADD COLUMN notes TEXT"))
 
         department_cols = {row[1] for row in conn.execute(sql_text("PRAGMA table_info(departments)")).fetchall()}
+        conn.execute(sql_text("""
+            CREATE TABLE IF NOT EXISTS workshops (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(200) NOT NULL UNIQUE,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
         if department_cols:
+            if "workshop_id" not in department_cols:
+                conn.execute(sql_text("ALTER TABLE departments ADD COLUMN workshop_id INTEGER"))
             if "letter_prefix" not in department_cols:
                 conn.execute(sql_text("ALTER TABLE departments ADD COLUMN letter_prefix VARCHAR(100)"))
             if "memo_prefix" not in department_cols:
@@ -638,9 +795,56 @@ def ensure_runtime_schema():
             conn.execute(sql_text("ALTER TABLE activities ADD COLUMN completion_memo_id INTEGER"))
         if "created_by_id" not in cols:
             conn.execute(sql_text("ALTER TABLE activities ADD COLUMN created_by_id INTEGER"))
+        if "plan_requested" not in cols:
+            conn.execute(sql_text("ALTER TABLE activities ADD COLUMN plan_requested BOOLEAN NOT NULL DEFAULT 0"))
+        if "complexity_level" not in cols:
+            conn.execute(sql_text("ALTER TABLE activities ADD COLUMN complexity_level INTEGER NOT NULL DEFAULT 3"))
+        conn.execute(sql_text("""
+            CREATE TABLE IF NOT EXISTS protocols (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title VARCHAR(255) NOT NULL,
+                protocol_date DATE NOT NULL,
+                description TEXT,
+                created_by_id INTEGER REFERENCES users(id),
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(sql_text("""
+            CREATE TABLE IF NOT EXISTS protocol_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                protocol_id INTEGER NOT NULL REFERENCES protocols(id) ON DELETE CASCADE,
+                activity_id INTEGER NOT NULL REFERENCES activities(id),
+                position INTEGER NOT NULL DEFAULT 1,
+                due_date DATE,
+                comment TEXT,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(protocol_id, activity_id)
+            )
+        """))
+        conn.execute(sql_text("""
+            CREATE INDEX IF NOT EXISTS ix_protocol_items_protocol_position
+            ON protocol_items (protocol_id, position)
+        """))
         document_cols = {row[1] for row in conn.execute(sql_text("PRAGMA table_info(activity_documents)")).fetchall()}
         if "uploaded_by_id" not in document_cols:
             conn.execute(sql_text("ALTER TABLE activity_documents ADD COLUMN uploaded_by_id INTEGER"))
+        if "ocr_status" not in document_cols:
+            conn.execute(sql_text("ALTER TABLE activity_documents ADD COLUMN ocr_status VARCHAR(20) NOT NULL DEFAULT 'completed'"))
+        if "ocr_error" not in document_cols:
+            conn.execute(sql_text("ALTER TABLE activity_documents ADD COLUMN ocr_error TEXT"))
+        if "ocr_started_at" not in document_cols:
+            conn.execute(sql_text("ALTER TABLE activity_documents ADD COLUMN ocr_started_at DATETIME"))
+        if "ocr_completed_at" not in document_cols:
+            conn.execute(sql_text("ALTER TABLE activity_documents ADD COLUMN ocr_completed_at DATETIME"))
+        letter_document_cols = {row[1] for row in conn.execute(sql_text("PRAGMA table_info(letter_documents)")).fetchall()}
+        if "ocr_status" not in letter_document_cols:
+            conn.execute(sql_text("ALTER TABLE letter_documents ADD COLUMN ocr_status VARCHAR(20) NOT NULL DEFAULT 'completed'"))
+        if "ocr_error" not in letter_document_cols:
+            conn.execute(sql_text("ALTER TABLE letter_documents ADD COLUMN ocr_error TEXT"))
+        if "ocr_started_at" not in letter_document_cols:
+            conn.execute(sql_text("ALTER TABLE letter_documents ADD COLUMN ocr_started_at DATETIME"))
+        if "ocr_completed_at" not in letter_document_cols:
+            conn.execute(sql_text("ALTER TABLE letter_documents ADD COLUMN ocr_completed_at DATETIME"))
         conn.execute(sql_text("""CREATE TABLE IF NOT EXISTS activity_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL REFERENCES activities(id),
             author_id INTEGER REFERENCES users(id), action VARCHAR(100) NOT NULL, details TEXT NOT NULL,
@@ -869,6 +1073,19 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+@app.before_request
+def reject_disabled_user_session():
+    """End an already open session after an administrator disables the account."""
+    if (
+        current_user.is_authenticated
+        and getattr(current_user, "id", None) != -1
+        and not current_user.is_active
+    ):
+        logout_user()
+        flash("Учётная запись отключена администратором.", "warning")
+        return redirect(url_for("login_page"))
+
+
 REPORT_SHARE_ENDPOINTS = {
     "activities_analytics": "activities",
     "plans_statistics": "plans_statistics",
@@ -968,6 +1185,156 @@ def crm_api_user(user):
     }
 
 
+def crm_api_json_body():
+    """Accept only JSON objects so integrations cannot accidentally submit form data."""
+    payload = request.get_json(silent=True)
+    return payload if isinstance(payload, dict) else None
+
+
+def crm_api_optional_text(value):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return False
+    return value.strip() or None
+
+
+def crm_api_datetime(value):
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo:
+            parsed = parsed.astimezone(dt.timezone.utc).replace(tzinfo=None)
+        return parsed
+    except ValueError:
+        return False
+
+
+def crm_api_active_user(user_id):
+    if not isinstance(user_id, int):
+        return None
+    user = db.session.get(User, user_id)
+    return user if user and user.is_approved and user.is_enabled else None
+
+
+def crm_api_activity_payload(activity):
+    return {
+        "id": activity.id,
+        "title": activity.title,
+        "description": activity.description,
+        "type": {"id": activity.type_id, "name": activity.type.name if activity.type else None},
+        "status": activity.status,
+        "status_label": get_activity_status_meta(activity.status)["label"],
+        "priority": activity.priority or 3,
+        "complexity_level": activity.complexity_level or 3,
+        "start_date": iso_or_none(activity.start_date),
+        "end_date": iso_or_none(activity.end_date),
+        "postponed_to": iso_or_none(activity.postponed_to),
+        "status_comment": activity.status_comment,
+        "direction": activity.direction,
+        "outgoing_document": activity.outgoing_document,
+        "owner": crm_api_user(activity.owner),
+        "assigned_department": {
+            "id": activity.assigned_department.id,
+            "name": activity.assigned_department.name,
+        } if activity.assigned_department else None,
+        "plan_id": activity.plan_id,
+        "source_document": {
+            "id": activity.source_letter.id,
+            "number": activity.source_letter.reg_number,
+            "subject": activity.source_letter.subject,
+        } if activity.source_letter else None,
+        "completion_memo": {
+            "id": activity.completion_memo.id,
+            "number": activity.completion_memo.reg_number,
+            "subject": activity.completion_memo.subject,
+        } if activity.completion_memo else None,
+    }
+
+
+def crm_api_plan_payload(plan):
+    return {
+        "id": plan.id,
+        "start_date": iso_or_none(plan.start_date),
+        "end_date": iso_or_none(plan.end_date),
+        "text": plan.plan_text,
+        "approval_status": plan.approval_status,
+        "revision_comment": plan.revision_comment,
+        "created_at": iso_or_none(plan.created_at),
+        "creator": crm_api_user(plan.creator),
+        "items": [{
+            "id": item.id,
+            "position": item.position,
+            "text": item.task_text,
+            "deadline_kind": item.deadline_kind,
+            "deadline_date": iso_or_none(item.deadline_date),
+            "status": item.status,
+            "comment": item.comment,
+            "completed_at": iso_or_none(item.completed_at),
+            "executor": crm_api_user(item.executor),
+            "linked_task": {
+                "id": item.linked_activity.id,
+                "title": item.linked_activity.title,
+            } if item.linked_activity else None,
+        } for item in plan.items],
+    }
+
+
+def crm_api_validate_plan_item(payload, plan, position, existing=None):
+    """Apply validated external plan-line values and return an error message if invalid."""
+    if not isinstance(payload, dict):
+        return "Каждый пункт плана должен быть JSON-объектом."
+
+    task_text = payload.get("text", existing.task_text if existing else "")
+    task_text = task_text.strip() if isinstance(task_text, str) else ""
+    if not task_text:
+        return "Для пункта плана укажите text."
+
+    executor_id = payload.get("executor_id", existing.executor_id if existing else None)
+    executor = crm_api_active_user(executor_id)
+    if not executor:
+        return "Укажите существующего активного исполнителя пункта плана."
+
+    deadline_kind = payload.get("deadline_kind", existing.deadline_kind if existing else "month")
+    if deadline_kind not in PLAN_DEADLINES:
+        return "Некорректный deadline_kind пункта плана."
+    deadline_date = crm_api_date(payload.get("deadline_date")) if "deadline_date" in payload else (existing.deadline_date if existing else None)
+    if deadline_date is False or (deadline_kind == "date" and not deadline_date):
+        return "Для срока date укажите deadline_date в формате YYYY-MM-DD."
+
+    status = payload.get("status", existing.status if existing else "planned")
+    if status not in PLAN_ITEM_STATUSES:
+        return "Некорректный статус пункта плана."
+
+    linked_activity_id = payload.get("linked_task_id", existing.linked_activity_id if existing else None)
+    linked_activity = None
+    if linked_activity_id is not None:
+        linked_activity = db.session.get(Activity, linked_activity_id) if isinstance(linked_activity_id, int) else None
+        if not linked_activity or linked_activity.archived_at or linked_activity.owner_id != executor.id:
+            return "Связать можно только с действующей задачей указанного исполнителя."
+
+    item = existing or PlanItem(plan_id=plan.id, position=position)
+    item.task_text = task_text
+    item.executor_id = executor.id
+    item.deadline_kind = deadline_kind
+    item.deadline_date = deadline_date
+    item.status = status
+    if "comment" in payload:
+        comment = crm_api_optional_text(payload["comment"])
+        if comment is False:
+            return "comment пункта плана должен быть строкой или null."
+        item.comment = comment
+    item.linked_activity_id = linked_activity.id if linked_activity else None
+    if status == "done" and not item.completed_at:
+        item.completed_at = dt.datetime.utcnow()
+    elif status != "done":
+        item.completed_at = None
+    return item
+
+
 @app.get("/api/crm/v1/health")
 @crm_api_required
 def crm_api_health():
@@ -1016,6 +1383,204 @@ def crm_api_tasks():
     return jsonify({"data": data, "pagination": {"total": total, "limit": limit, "offset": offset}})
 
 
+@app.post("/api/crm/v1/tasks")
+@crm_api_required
+def crm_api_create_task():
+    payload = crm_api_json_body()
+    if not payload:
+        return jsonify({"error": "invalid_json", "message": "Передайте JSON-объект задачи."}), 400
+
+    title = payload.get("title")
+    owner = crm_api_active_user(payload.get("owner_id"))
+    start_date = crm_api_datetime(payload.get("start_date"))
+    end_date = crm_api_datetime(payload.get("end_date"))
+    type_id = payload.get("type_id")
+    activity_type = db.session.get(ActivityType, type_id) if isinstance(type_id, int) else None
+    if not isinstance(title, str) or not title.strip() or not owner or start_date is False or not start_date or end_date is False or not activity_type:
+        return jsonify({"error": "validation_error", "message": "Укажите title, type_id, owner_id и start_date. Исполнитель должен быть активен."}), 400
+    if end_date and end_date < start_date:
+        return jsonify({"error": "validation_error", "message": "end_date не может быть раньше start_date."}), 400
+
+    priority = parse_activity_priority(payload.get("priority", 3))
+    complexity_level = parse_activity_complexity(payload.get("complexity_level", 3))
+    status = payload.get("status", "in_progress")
+    if priority is None or complexity_level is None or status not in ACTIVITY_STATUS_META:
+        return jsonify({"error": "validation_error", "message": "Некорректные priority, complexity_level или status."}), 400
+
+    assigned_department_id = payload.get("assigned_department_id")
+    assigned_department = None
+    if assigned_department_id is not None:
+        assigned_department = db.session.get(Department, assigned_department_id) if isinstance(assigned_department_id, int) else None
+        if not assigned_department:
+            return jsonify({"error": "validation_error", "message": "Назначенный отдел не найден."}), 400
+
+    source_letter_id = payload.get("source_letter_id")
+    completion_memo_id = payload.get("completion_memo_id")
+    source_letter = db.session.get(Letter, source_letter_id) if source_letter_id is not None else None
+    completion_memo = db.session.get(Letter, completion_memo_id) if completion_memo_id is not None else None
+    if (source_letter_id is not None and not source_letter) or (completion_memo_id is not None and not completion_memo):
+        return jsonify({"error": "validation_error", "message": "Связанный документ не найден."}), 400
+
+    plan_id = payload.get("plan_id")
+    plan = db.session.get(Plan, plan_id) if plan_id is not None else None
+    if plan_id is not None and not plan:
+        return jsonify({"error": "validation_error", "message": "План не найден."}), 400
+
+    postponed_to = crm_api_datetime(payload.get("postponed_to"))
+    if postponed_to is False:
+        return jsonify({"error": "validation_error", "message": "postponed_to должен быть датой ISO 8601."}), 400
+    if status == "postponed" and not postponed_to:
+        return jsonify({"error": "validation_error", "message": "Для статуса postponed укажите postponed_to."}), 400
+
+    description = crm_api_optional_text(payload.get("description"))
+    direction = crm_api_optional_text(payload.get("direction"))
+    outgoing_document = crm_api_optional_text(payload.get("outgoing_document"))
+    status_comment = crm_api_optional_text(payload.get("status_comment"))
+    if False in (description, direction, outgoing_document, status_comment):
+        return jsonify({"error": "validation_error", "message": "Текстовые поля должны быть строкой или null."}), 400
+
+    activity = Activity(
+        title=title.strip(),
+        description=description,
+        type_id=activity_type.id,
+        owner_id=owner.id,
+        start_date=start_date,
+        end_date=end_date,
+        status=status,
+        priority=priority,
+        complexity_level=complexity_level,
+        direction=direction,
+        outgoing_document=outgoing_document,
+        assigned_department_id=assigned_department.id if assigned_department else None,
+        status_comment=status_comment,
+        postponed_to=postponed_to,
+        source_letter_id=source_letter.id if source_letter else None,
+        completion_memo_id=completion_memo.id if completion_memo else None,
+        plan_id=plan.id if plan else None,
+        plan_requested=bool(payload.get("plan_requested", False)),
+    )
+    db.session.add(activity)
+    db.session.flush()
+    if plan:
+        position = max((item.position for item in plan.items), default=0) + 1
+        db.session.add(PlanItem(
+            plan_id=plan.id,
+            executor_id=owner.id,
+            position=position,
+            task_text=activity.title,
+            deadline_kind="date" if activity.end_date else "month",
+            deadline_date=activity.end_date.date() if activity.end_date else None,
+            linked_activity_id=activity.id,
+            status="planned",
+        ))
+        activity.plan_requested = False
+    add_activity_history(activity, "Создание задачи", "Задача создана через внешнюю CRM.")
+    db.session.commit()
+    return jsonify({"data": crm_api_activity_payload(activity)}), 201
+
+
+@app.patch("/api/crm/v1/tasks/<int:activity_id>")
+@crm_api_required
+def crm_api_update_task(activity_id):
+    payload = crm_api_json_body()
+    if not payload:
+        return jsonify({"error": "invalid_json", "message": "Передайте JSON-объект с изменяемыми полями."}), 400
+    activity = Activity.query.options(
+        joinedload(Activity.owner).joinedload(User.department), joinedload(Activity.type),
+        joinedload(Activity.assigned_department), joinedload(Activity.source_letter), joinedload(Activity.completion_memo),
+    ).filter_by(id=activity_id).first_or_404()
+    if activity.archived_at:
+        return jsonify({"error": "archived", "message": "Архивную задачу изменять нельзя."}), 409
+
+    changes = []
+    if "title" in payload:
+        title = payload["title"]
+        if not isinstance(title, str) or not title.strip():
+            return jsonify({"error": "validation_error", "message": "title не может быть пустым."}), 400
+        if title.strip() != activity.title:
+            activity.title = title.strip()
+            changes.append("название")
+    for field in ("description", "direction", "outgoing_document", "status_comment"):
+        if field in payload:
+            value = payload[field]
+            if value is not None and not isinstance(value, str):
+                return jsonify({"error": "validation_error", "message": "{} должен быть строкой или null.".format(field)}), 400
+            if getattr(activity, field) != (value.strip() if isinstance(value, str) and value.strip() else None):
+                setattr(activity, field, value.strip() if isinstance(value, str) and value.strip() else None)
+                changes.append(field)
+    if "type_id" in payload:
+        activity_type = db.session.get(ActivityType, payload["type_id"]) if isinstance(payload["type_id"], int) else None
+        if not activity_type:
+            return jsonify({"error": "validation_error", "message": "Тип задачи не найден."}), 400
+        if activity.type_id != activity_type.id:
+            activity.type_id = activity_type.id
+            changes.append("тип")
+    if "owner_id" in payload:
+        owner = crm_api_active_user(payload["owner_id"])
+        if not owner:
+            return jsonify({"error": "validation_error", "message": "Исполнитель не найден или отключён."}), 400
+        if activity.owner_id != owner.id:
+            activity.owner_id = owner.id
+            changes.append("исполнитель")
+    if "assigned_department_id" in payload:
+        department_id = payload["assigned_department_id"]
+        department = db.session.get(Department, department_id) if isinstance(department_id, int) else None
+        if department_id is not None and not department:
+            return jsonify({"error": "validation_error", "message": "Назначенный отдел не найден."}), 400
+        if activity.assigned_department_id != (department.id if department else None):
+            activity.assigned_department_id = department.id if department else None
+            changes.append("назначенный отдел")
+    if "priority" in payload:
+        priority = parse_activity_priority(payload["priority"])
+        if priority is None:
+            return jsonify({"error": "validation_error", "message": "priority должен быть от 1 до 5."}), 400
+        if activity.priority != priority:
+            activity.priority = priority
+            changes.append("приоритет")
+    if "complexity_level" in payload:
+        complexity_level = parse_activity_complexity(payload["complexity_level"])
+        if complexity_level is None:
+            return jsonify({"error": "validation_error", "message": "complexity_level должен быть от 1 до 5."}), 400
+        if activity.complexity_level != complexity_level:
+            activity.complexity_level = complexity_level
+            changes.append("сложность")
+    for field in ("start_date", "end_date", "postponed_to"):
+        if field in payload:
+            value = crm_api_datetime(payload[field])
+            if value is False:
+                return jsonify({"error": "validation_error", "message": "{} должен быть датой ISO 8601 или null.".format(field)}), 400
+            if getattr(activity, field) != value:
+                setattr(activity, field, value)
+                changes.append(field)
+    if activity.end_date and activity.start_date and activity.end_date < activity.start_date:
+        return jsonify({"error": "validation_error", "message": "end_date не может быть раньше start_date."}), 400
+    if "status" in payload:
+        status = payload["status"]
+        if status not in ACTIVITY_STATUS_META:
+            return jsonify({"error": "validation_error", "message": "Некорректный статус задачи."}), 400
+        if status == "postponed" and not activity.postponed_to:
+            return jsonify({"error": "validation_error", "message": "Для статуса postponed укажите postponed_to."}), 400
+        if activity.status != status:
+            activity.status = status
+            changes.append("статус")
+    if "plan_id" in payload:
+        plan_id = payload["plan_id"]
+        plan = db.session.get(Plan, plan_id) if isinstance(plan_id, int) else None
+        if plan_id is not None and not plan:
+            return jsonify({"error": "validation_error", "message": "План не найден."}), 400
+        if activity.plan_id != (plan.id if plan else None):
+            activity.plan_id = plan.id if plan else None
+            changes.append("план")
+    if "plan_requested" in payload:
+        activity.plan_requested = bool(payload["plan_requested"])
+        changes.append("ожидание плана")
+
+    if changes:
+        add_activity_history(activity, "Изменение задачи", "Изменено через внешнюю CRM: {}.".format(", ".join(changes)))
+        db.session.commit()
+    return jsonify({"data": crm_api_activity_payload(activity)})
+
+
 @app.get("/api/crm/v1/plans")
 @crm_api_required
 def crm_api_plans():
@@ -1052,6 +1617,130 @@ def crm_api_plans():
             } for item in plan.items],
         })
     return jsonify({"data": data, "pagination": {"total": total, "limit": limit, "offset": offset}})
+
+
+@app.post("/api/crm/v1/plans")
+@crm_api_required
+def crm_api_create_plan():
+    payload = crm_api_json_body()
+    if not payload:
+        return jsonify({"error": "invalid_json", "message": "Передайте JSON-объект плана."}), 400
+    start_date = crm_api_date(payload.get("start_date"))
+    end_date = crm_api_date(payload.get("end_date"))
+    plan_text = payload.get("text")
+    if not start_date or not end_date or start_date is False or end_date is False or not isinstance(plan_text, str) or not plan_text.strip():
+        return jsonify({"error": "validation_error", "message": "Укажите text, start_date и end_date в формате YYYY-MM-DD."}), 400
+    if end_date < start_date:
+        return jsonify({"error": "validation_error", "message": "end_date не может быть раньше start_date."}), 400
+    creator_id = payload.get("created_by_id")
+    creator = crm_api_active_user(creator_id) if creator_id is not None else None
+    if creator_id is not None and not creator:
+        return jsonify({"error": "validation_error", "message": "Автор плана не найден или отключён."}), 400
+    if creator and Plan.query.filter_by(created_by=creator.id, start_date=start_date).first():
+        return jsonify({"error": "conflict", "message": "У автора уже есть план на этот месяц."}), 409
+    approval_status = payload.get("approval_status", "submitted")
+    if approval_status not in {"submitted", "revision", "approved"}:
+        return jsonify({"error": "validation_error", "message": "Некорректный approval_status."}), 400
+    items = payload.get("items")
+    if not isinstance(items, list) or not items:
+        return jsonify({"error": "validation_error", "message": "Добавьте непустой массив items."}), 400
+    revision_comment = crm_api_optional_text(payload.get("revision_comment"))
+    if revision_comment is False:
+        return jsonify({"error": "validation_error", "message": "revision_comment должен быть строкой или null."}), 400
+
+    plan = Plan(
+        start_date=start_date,
+        end_date=end_date,
+        plan_text=plan_text.strip(),
+        created_by=creator.id if creator else None,
+        approval_status=approval_status,
+        revision_comment=revision_comment,
+        approved_at=dt.datetime.utcnow() if approval_status == "approved" else None,
+    )
+    db.session.add(plan)
+    db.session.flush()
+    for position, item_payload in enumerate(items, start=1):
+        item = crm_api_validate_plan_item(item_payload, plan, position)
+        if isinstance(item, str):
+            db.session.rollback()
+            return jsonify({"error": "validation_error", "message": item, "item_position": position}), 400
+        db.session.add(item)
+    db.session.flush()
+    add_pending_activities_to_plan(plan)
+    db.session.commit()
+    return jsonify({"data": crm_api_plan_payload(plan)}), 201
+
+
+@app.patch("/api/crm/v1/plans/<int:plan_id>")
+@crm_api_required
+def crm_api_update_plan(plan_id):
+    payload = crm_api_json_body()
+    if not payload:
+        return jsonify({"error": "invalid_json", "message": "Передайте JSON-объект с изменяемыми полями."}), 400
+    plan = Plan.query.options(
+        joinedload(Plan.creator), joinedload(Plan.items).joinedload(PlanItem.executor).joinedload(User.department),
+        joinedload(Plan.items).joinedload(PlanItem.linked_activity),
+    ).filter_by(id=plan_id).first_or_404()
+    if "text" in payload:
+        text_value = payload["text"]
+        if not isinstance(text_value, str) or not text_value.strip():
+            return jsonify({"error": "validation_error", "message": "text не может быть пустым."}), 400
+        plan.plan_text = text_value.strip()
+    for field in ("start_date", "end_date"):
+        if field in payload:
+            value = crm_api_date(payload[field])
+            if not value:
+                return jsonify({"error": "validation_error", "message": "{} должен быть датой YYYY-MM-DD.".format(field)}), 400
+            setattr(plan, field, value)
+    if plan.end_date < plan.start_date:
+        return jsonify({"error": "validation_error", "message": "end_date не может быть раньше start_date."}), 400
+    if "approval_status" in payload:
+        status = payload["approval_status"]
+        if status not in {"submitted", "revision", "approved"}:
+            return jsonify({"error": "validation_error", "message": "Некорректный approval_status."}), 400
+        plan.approval_status = status
+        plan.approved_at = dt.datetime.utcnow() if status == "approved" else None
+    if "revision_comment" in payload:
+        value = payload["revision_comment"]
+        if value is not None and not isinstance(value, str):
+            return jsonify({"error": "validation_error", "message": "revision_comment должен быть строкой или null."}), 400
+        plan.revision_comment = value.strip() if isinstance(value, str) and value.strip() else None
+    db.session.commit()
+    return jsonify({"data": crm_api_plan_payload(plan)})
+
+
+@app.post("/api/crm/v1/plans/<int:plan_id>/items")
+@crm_api_required
+def crm_api_create_plan_item(plan_id):
+    payload = crm_api_json_body()
+    if not payload:
+        return jsonify({"error": "invalid_json", "message": "Передайте JSON-объект пункта плана."}), 400
+    plan = db.session.get(Plan, plan_id)
+    if not plan:
+        return jsonify({"error": "not_found", "message": "План не найден."}), 404
+    position = max((item.position for item in plan.items), default=0) + 1
+    item = crm_api_validate_plan_item(payload, plan, position)
+    if isinstance(item, str):
+        return jsonify({"error": "validation_error", "message": item}), 400
+    db.session.add(item)
+    db.session.commit()
+    return jsonify({"data": crm_api_plan_payload(plan)}), 201
+
+
+@app.patch("/api/crm/v1/plans/<int:plan_id>/items/<int:item_id>")
+@crm_api_required
+def crm_api_update_plan_item(plan_id, item_id):
+    payload = crm_api_json_body()
+    if not payload:
+        return jsonify({"error": "invalid_json", "message": "Передайте JSON-объект с изменяемыми полями."}), 400
+    item = PlanItem.query.filter_by(id=item_id, plan_id=plan_id).first()
+    if not item:
+        return jsonify({"error": "not_found", "message": "Пункт плана не найден."}), 404
+    updated_item = crm_api_validate_plan_item(payload, item.plan, item.position, existing=item)
+    if isinstance(updated_item, str):
+        return jsonify({"error": "validation_error", "message": updated_item}), 400
+    db.session.commit()
+    return jsonify({"data": crm_api_plan_payload(item.plan)})
 
 
 @app.get("/api/crm/v1/memos")
@@ -1156,7 +1845,8 @@ def index():
 def login_page():
     login_users = (
         User.query
-        .filter_by(is_approved=True)
+        .options(joinedload(User.department).joinedload(Department.workshop))
+        .filter_by(is_approved=True, is_enabled=True)
         .order_by(User.full_name.asc())
         .all()
     )
@@ -1164,6 +1854,11 @@ def login_page():
         "login.html",
         title="Вход",
         login_users=login_users,
+        workshops=Workshop.query.order_by(Workshop.name.asc()).all(),
+        has_unassigned_users=any(
+            not user.department or not user.department.workshop_id
+            for user in login_users
+        ),
         superadmin_login=SUPERADMIN_LOGIN,
     )
     return render_template("login.html", title="Вход")
@@ -1173,7 +1868,7 @@ def login_page():
 def chat_tray_login_users():
     login_users = (
         User.query
-        .filter_by(is_approved=True)
+        .filter_by(is_approved=True, is_enabled=True)
         .order_by(User.full_name.asc())
         .all()
     )
@@ -1245,7 +1940,7 @@ def dashboard():
     last_day = next_quarter - timedelta(days=1)
     start_str = request.args.get("date_from", first_day.strftime("%Y-%m-%d"))
     end_str = request.args.get("date_to", last_day.strftime("%Y-%m-%d"))
-    my_only = request.args.get("my_only") == "1"
+    my_only = (request.args.get("my_only") or "").lower() in ("1", "true", "on")
     owner_id = request.args.get("owner_id", "").strip()
     selected_status = request.args.get("status", "active_and_not_done").strip() or "active_and_not_done"
 
@@ -1430,6 +2125,7 @@ def create_activity():
         start_date = request.form.get("start_date")
         end_date = request.form.get("end_date")
         priority = parse_activity_priority(request.form.get("priority", "3"))
+        complexity_level = parse_activity_complexity(request.form.get("complexity_level", "3"))
         direction = request.form.get("direction", "").strip()
         outgoing_document = request.form.get("outgoing_document", "").strip()
         add_to_plan = request.form.get("add_to_plan") == "1"
@@ -1451,6 +2147,9 @@ def create_activity():
             return redirect(request.url)
         if priority is None:
             flash("Выберите приоритет от 1 до 5.", "warning")
+            return redirect(request.url)
+        if complexity_level is None:
+            flash("Выберите уровень сложности от 1 до 5.", "warning")
             return redirect(request.url)
         if can_assign_executors and not executor_ids:
             message = "Заместителю должен быть назначен отдел." if current_user.role == "deputy" and not current_user.department_id else "Выберите хотя бы одного ответственного."
@@ -1506,9 +2205,11 @@ def create_activity():
                 end_date=datetime.strptime(end_date, "%Y-%m-%d") if end_date else None,
                 status="in_progress",
                 priority=priority,
+                complexity_level=complexity_level,
                 direction=direction,
                 outgoing_document=outgoing_document,
                 plan_id=plan_id,
+                plan_requested=add_to_plan and not bool(matched_plan),
             )
             db.session.add(a)
             db.session.flush()
@@ -1528,6 +2229,7 @@ def create_activity():
                     deadline_date=task_end.date() if end_date else None,
                     linked_activity_id=a.id,
                 ))
+                a.plan_requested = False
             created.append(a)
         db.session.commit()
         for activity in created:
@@ -1545,7 +2247,7 @@ def create_activity():
             if linked_to_plan:
                 message += f" В планы добавлено: {linked_to_plan}."
             else:
-                message += " У выбранного исполнителя нет плана на дату начала задачи."
+                message += " Подходящего плана пока нет: задача будет добавлена автоматически после его создания."
         flash(message)
         return redirect(url_for("activities_page"))
 
@@ -1604,14 +2306,13 @@ def activities_page():
                 Activity.assigned_department_id == department_id if department_id else False,
             )
         )
-    else:
-        if my_only:
-            q = q.filter(Activity.owner_id == current_user.id)
-        elif owner_id:
-            try:
-                q = q.filter(Activity.owner_id == int(owner_id))
-            except ValueError:
-                pass
+    if my_only:
+        q = q.filter(Activity.owner_id == current_user.id)
+    elif current_user.role in privileged_roles and owner_id:
+        try:
+            q = q.filter(Activity.owner_id == int(owner_id))
+        except ValueError:
+            pass
 
     if created_by_me:
         q = q.filter(Activity.created_by_id == current_user.id)
@@ -1749,8 +2450,34 @@ def activities_analytics():
             return "postponed"
         return "in_progress"
 
+    complexity_hours = {
+        level: get_activity_complexity_meta(level)["daily_hours"]
+        for level in ACTIVITY_COMPLEXITY_META
+    }
+
+    def effort_hours_for(activity, complexity_level):
+        if not activity.start_date or not activity.end_date:
+            return 0
+        start_day = activity.start_date.date()
+        end_day = activity.end_date.date()
+        if end_day < start_day:
+            return 0
+        working_days = sum(
+            1 for offset in range((end_day - start_day).days + 1)
+            if (start_day + dt.timedelta(days=offset)).weekday() < 5
+        )
+        return working_days * complexity_hours[complexity_level]
+
     def empty_row(name, department_name=""):
-        return {"name": name, "department": department_name, "total": 0, **{key: 0 for key in buckets}}
+        return {
+            "name": name,
+            "department": department_name,
+            "total": 0,
+            "complexity_total": 0,
+            "complexity_done": 0,
+            "workload_hours": 0,
+            **{key: 0 for key in buckets},
+        }
 
     department_rows_by_id = {}
     user_rows_by_id = {}
@@ -1767,13 +2494,25 @@ def activities_analytics():
         owner_name = owner.full_name if owner else "Удаленный пользователь"
         if owner_id not in user_rows_by_id:
             user_rows_by_id[owner_id] = empty_row(owner_name, department_name)
+        complexity_level = parse_activity_complexity(activity.complexity_level) or 3
+        activity_effort_hours = effort_hours_for(activity, complexity_level)
         for row in (summary, department_rows_by_id[department_id], user_rows_by_id[owner_id]):
             row["total"] += 1
             row[bucket] += 1
+            if bucket != "cancelled":
+                row["complexity_total"] += complexity_level
+                row["workload_hours"] += activity_effort_hours
+                if bucket == "done":
+                    row["complexity_done"] += complexity_level
 
     def add_completion(row):
         applicable = row["total"] - row["cancelled"]
         row["completion"] = round(row["done"] * 100 / applicable) if applicable else 0
+        row["complexity_completion"] = round(
+            row["complexity_done"] * 100 / row["complexity_total"]
+        ) if row["complexity_total"] else 0
+        # 50% is completion by number of tasks, 50% is completion by complexity.
+        row["quality"] = round((row["completion"] + row["complexity_completion"]) / 2, 1)
         return row
 
     summary = add_completion(summary)
@@ -1793,6 +2532,9 @@ def activities_analytics():
         "department_done": [row["done"] for row in department_rows],
         "department_not_done": [row["not_done"] for row in department_rows],
         "department_work": [row["in_progress"] + row["postponed"] for row in department_rows],
+        "department_completion": [row["completion"] for row in department_rows],
+        "department_complexity_completion": [row["complexity_completion"] for row in department_rows],
+        "department_quality": [row["quality"] for row in department_rows],
         "user_labels": [row["name"] for row in user_rows],
         "user_done": [row["done"] for row in user_rows],
         "user_not_done": [row["not_done"] for row in user_rows],
@@ -1868,6 +2610,186 @@ def activities_analytics():
         is_manager=is_manager,
         extra_rows=extra_rows,
     )
+
+
+# --- Протоколы: административные документы с перечнем обычных задач ---
+def can_manage_protocol(protocol):
+    return current_user.role == "superadmin" or protocol.created_by_id == current_user.id
+
+
+@app.route("/protocols", methods=["GET", "POST"])
+@role_required("admin", "superadmin")
+def protocols_page():
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()
+        description = (request.form.get("description") or "").strip()
+        date_raw = (request.form.get("protocol_date") or "").strip()
+        if not title:
+            flash("Укажите название протокола.", "warning")
+            return redirect(url_for("protocols_page"))
+        try:
+            protocol_date = dt.datetime.strptime(date_raw, "%Y-%m-%d").date() if date_raw else dt.date.today()
+        except ValueError:
+            flash("Некорректная дата протокола.", "warning")
+            return redirect(url_for("protocols_page"))
+        protocol = Protocol(
+            title=title,
+            description=description or None,
+            protocol_date=protocol_date,
+            created_by_id=current_user.id if current_user.id != -1 else None,
+        )
+        db.session.add(protocol)
+        db.session.commit()
+        flash("Протокол создан. Теперь добавьте в него задачи.", "success")
+        return redirect(url_for("protocol_detail", protocol_id=protocol.id))
+
+    query = Protocol.query.options(joinedload(Protocol.creator), joinedload(Protocol.items))
+    if current_user.role != "superadmin":
+        query = query.filter(Protocol.created_by_id == current_user.id)
+    protocols = query.order_by(Protocol.protocol_date.desc(), Protocol.id.desc()).all()
+    return render_template("protocols.html", title="Протоколы", protocols=protocols, today=dt.date.today())
+
+
+@app.get("/protocols/<int:protocol_id>")
+@role_required("admin", "superadmin")
+def protocol_detail(protocol_id):
+    protocol = Protocol.query.options(
+        joinedload(Protocol.creator),
+        joinedload(Protocol.items).joinedload(ProtocolItem.activity).joinedload(Activity.owner),
+    ).get_or_404(protocol_id)
+    if not can_manage_protocol(protocol):
+        abort(403)
+
+    attached_activity_ids = [item.activity_id for item in protocol.items]
+    available_query = Activity.query.options(joinedload(Activity.owner)).filter(
+        Activity.archived_at.is_(None)
+    )
+    if attached_activity_ids:
+        available_query = available_query.filter(~Activity.id.in_(attached_activity_ids))
+    available_activities = available_query.order_by(Activity.start_date.desc(), Activity.id.desc()).limit(500).all()
+    return render_template(
+        "protocol_detail.html",
+        title="Протокол №{}".format(protocol.id),
+        protocol=protocol,
+        available_activities=available_activities,
+        activity_types=ActivityType.query.order_by(ActivityType.name).all(),
+        users=User.query.filter_by(is_approved=True).order_by(User.full_name).all(),
+        get_status_meta=get_activity_status_meta,
+    )
+
+
+@app.post("/protocols/<int:protocol_id>/items")
+@role_required("admin", "superadmin")
+def protocol_add_item(protocol_id):
+    protocol = Protocol.query.get_or_404(protocol_id)
+    if not can_manage_protocol(protocol):
+        abort(403)
+
+    activity_id = request.form.get("activity_id", type=int)
+    activity = db.session.get(Activity, activity_id) if activity_id else None
+    if not activity or activity.archived_at:
+        flash("Выберите действующую задачу.", "warning")
+        return redirect(url_for("protocol_detail", protocol_id=protocol.id))
+    if ProtocolItem.query.filter_by(protocol_id=protocol.id, activity_id=activity.id).first():
+        flash("Эта задача уже добавлена в протокол.", "info")
+        return redirect(url_for("protocol_detail", protocol_id=protocol.id))
+
+    position = max((item.position for item in protocol.items), default=0) + 1
+    db.session.add(ProtocolItem(
+        protocol_id=protocol.id,
+        activity_id=activity.id,
+        position=position,
+        due_date=activity.end_date.date() if activity.end_date else None,
+        comment=(request.form.get("comment") or "").strip() or None,
+    ))
+    db.session.commit()
+    flash("Задача добавлена в протокол.", "success")
+    return redirect(url_for("protocol_detail", protocol_id=protocol.id))
+
+
+@app.post("/protocols/<int:protocol_id>/create-task")
+@role_required("admin", "superadmin")
+def protocol_create_task(protocol_id):
+    """Create a regular task and immediately attach it to this protocol."""
+    protocol = Protocol.query.get_or_404(protocol_id)
+    if not can_manage_protocol(protocol):
+        abort(403)
+
+    title = (request.form.get("title") or "").strip()
+    description = (request.form.get("description") or "").strip()
+    type_id = request.form.get("type_id", type=int)
+    owner_id = request.form.get("owner_id", type=int)
+    start_raw = (request.form.get("start_date") or "").strip()
+    end_raw = (request.form.get("end_date") or "").strip()
+    priority = parse_activity_priority(request.form.get("priority")) or 3
+    complexity_level = parse_activity_complexity(request.form.get("complexity_level")) or 3
+    activity_type = db.session.get(ActivityType, type_id) if type_id else None
+    owner = db.session.get(User, owner_id) if owner_id else None
+    if not title or not activity_type or not owner or not end_raw:
+        flash("Укажите название, тип, исполнителя и срок задачи.", "warning")
+        return redirect(url_for("protocol_detail", protocol_id=protocol.id))
+    try:
+        start_date = dt.datetime.strptime(start_raw, "%Y-%m-%d").date() if start_raw else dt.date.today()
+        end_date = dt.datetime.strptime(end_raw, "%Y-%m-%d").date()
+    except ValueError:
+        flash("Некорректная дата задачи.", "warning")
+        return redirect(url_for("protocol_detail", protocol_id=protocol.id))
+    if end_date < start_date:
+        flash("Срок выполнения не может быть раньше даты начала.", "warning")
+        return redirect(url_for("protocol_detail", protocol_id=protocol.id))
+
+    activity = Activity(
+        type_id=activity_type.id,
+        owner_id=owner.id,
+        created_by_id=current_user.id if current_user.id != -1 else None,
+        title=title,
+        description=description or None,
+        start_date=dt.datetime.combine(start_date, dt.time.min),
+        end_date=dt.datetime.combine(end_date, dt.time.max),
+        status="in_progress",
+        priority=priority,
+        complexity_level=complexity_level,
+    )
+    db.session.add(activity)
+    db.session.flush()
+    position = max((item.position for item in protocol.items), default=0) + 1
+    db.session.add(ProtocolItem(
+        protocol_id=protocol.id,
+        activity_id=activity.id,
+        position=position,
+        due_date=end_date,
+        comment="Создана из протокола.",
+    ))
+    add_activity_history(activity, "Создание задачи", "Задача создана из протокола №{}.".format(protocol.id))
+    db.session.commit()
+    flash("Задача создана и добавлена в протокол.", "success")
+    return redirect(url_for("protocol_detail", protocol_id=protocol.id))
+
+
+@app.post("/protocols/<int:protocol_id>/items/<int:item_id>/delete")
+@role_required("admin", "superadmin")
+def protocol_delete_item(protocol_id, item_id):
+    protocol = Protocol.query.get_or_404(protocol_id)
+    if not can_manage_protocol(protocol):
+        abort(403)
+    item = ProtocolItem.query.filter_by(id=item_id, protocol_id=protocol.id).first_or_404()
+    db.session.delete(item)
+    db.session.commit()
+    flash("Задача исключена из протокола.", "success")
+    return redirect(url_for("protocol_detail", protocol_id=protocol.id))
+
+
+@app.post("/protocols/<int:protocol_id>/delete")
+@role_required("admin", "superadmin")
+def protocol_delete(protocol_id):
+    protocol = Protocol.query.get_or_404(protocol_id)
+    if not can_manage_protocol(protocol):
+        abort(403)
+    db.session.delete(protocol)
+    db.session.commit()
+    flash("Протокол удалён.", "success")
+    return redirect(url_for("protocols_page"))
+
 
 @app.post("/activities")
 @login_required
@@ -1958,6 +2880,18 @@ def activity_view(activity_id: int):
     closure_memos = closure_memos_query.order_by(
         Letter.letter_date.desc().nullslast(), Letter.id.desc()
     ).all()
+    linked_plan = None
+    if a.plan_id:
+        linked_plan = db.session.get(Plan, a.plan_id)
+    if linked_plan is None:
+        linked_plan = (
+            Plan.query.join(PlanItem)
+            .filter(PlanItem.linked_activity_id == a.id)
+            .first()
+        )
+    plan_add_candidate = None
+    if is_owner and not a.archived_at and linked_plan is None:
+        plan_add_candidate = find_matching_plan_for_activity(a)
 
     return render_template(
         "activity_view.html",
@@ -1972,10 +2906,65 @@ def activity_view(activity_id: int):
         status_meta=get_activity_status_meta(a.status),
         can_delegate=can_delegate,
         closure_memos=closure_memos,
+        linked_plan=linked_plan,
+        plan_add_candidate=plan_add_candidate,
+        has_pending_ocr=any(document.ocr_status in ("queued", "processing") for document in a.documents),
         delegation_users=User.query.filter_by(is_approved=True).order_by(User.full_name).all() if can_delegate else [],
         delegation_departments=Department.query.order_by(Department.name).all() if can_delegate else [],
         history=ActivityHistory.query.filter_by(activity_id=a.id).order_by(ActivityHistory.created_at.desc()).all(),
     )
+
+
+@app.post("/activities/<int:activity_id>/add-to-plan")
+@login_required
+def add_activity_to_plan(activity_id):
+    """Lets an executor attach an existing task to their monthly plan."""
+    activity = Activity.query.get_or_404(activity_id)
+    if activity.owner_id != current_user.id or activity.archived_at:
+        abort(403)
+
+    plan = find_matching_plan_for_activity(activity)
+    if plan is None:
+        flash("План исполнителя на месяц даты начала задачи пока не создан.", "warning")
+        return redirect(url_for("activity_view", activity_id=activity.id))
+
+    existing_item = PlanItem.query.filter_by(
+        plan_id=plan.id, linked_activity_id=activity.id
+    ).first()
+    if existing_item:
+        activity.plan_id = plan.id
+        activity.plan_requested = False
+        db.session.commit()
+        flash("Задача уже находится в этом плане.", "info")
+        return redirect(url_for("plan_detail", plan_id=plan.id))
+
+    position = (
+        db.session.query(func.max(PlanItem.position))
+        .filter(PlanItem.plan_id == plan.id)
+        .scalar()
+        or 0
+    )
+    deadline_date = activity.end_date.date() if activity.end_date else None
+    db.session.add(PlanItem(
+        plan_id=plan.id,
+        executor_id=activity.owner_id,
+        position=position + 1,
+        task_text=activity.title,
+        deadline_kind="date" if deadline_date else "month",
+        deadline_date=deadline_date,
+        linked_activity_id=activity.id,
+        status="planned",
+    ))
+    activity.plan_id = plan.id
+    activity.plan_requested = False
+    add_activity_history(
+        activity,
+        "Добавление в план",
+        "Исполнитель добавил задачу в план «{}».".format(plan.plan_text),
+    )
+    db.session.commit()
+    flash("Задача добавлена в план.", "success")
+    return redirect(url_for("plan_detail", plan_id=plan.id))
 
 
 @app.get("/activities/archive")
@@ -2144,6 +3133,7 @@ def edit_activity(activity_id):
             "end_date": activity.end_date.strftime("%d.%m.%Y") if activity.end_date else "-",
             "status": get_activity_status_meta(activity.status)["label"],
             "priority": activity.priority or 3,
+            "complexity": activity.complexity_level or 3,
             "direction": activity.direction or "",
             "outgoing_document": activity.outgoing_document or "",
         }
@@ -2176,6 +3166,12 @@ def edit_activity(activity_id):
         if priority is None:
             flash("Выберите приоритет от 1 до 5.", "warning")
             return redirect(request.url)
+        complexity_level = parse_activity_complexity(
+            request.form.get("complexity_level", activity.complexity_level)
+        )
+        if complexity_level is None:
+            flash("Выберите уровень сложности от 1 до 5.", "warning")
+            return redirect(request.url)
         type_id = (request.form.get("type_id") or "").strip()
         selected_type = db.session.get(ActivityType, int(type_id)) if type_id.isdigit() else None
         activity.title = title
@@ -2186,6 +3182,7 @@ def edit_activity(activity_id):
         activity.end_date = end_date
         activity.status = status
         activity.priority = priority
+        activity.complexity_level = complexity_level
         activity.direction = (request.form.get("direction") or "").strip()
         activity.outgoing_document = (request.form.get("outgoing_document") or "").strip()
         updated_values = {
@@ -2197,6 +3194,7 @@ def edit_activity(activity_id):
             "Дата окончания": (previous_values["end_date"], activity.end_date.strftime("%d.%m.%Y") if activity.end_date else "-"),
             "Статус": (previous_values["status"], get_activity_status_meta(activity.status)["label"]),
             "Приоритет": (get_activity_priority_meta(previous_values["priority"])["label"], get_activity_priority_meta(activity.priority)["label"]),
+            "Сложность": (get_activity_complexity_meta(previous_values["complexity"])["label"], get_activity_complexity_meta(activity.complexity_level)["label"]),
             "Тема": (previous_values["direction"], activity.direction or ""),
             "Исходный документ": (previous_values["outgoing_document"], activity.outgoing_document or ""),
         }
@@ -2299,22 +3297,20 @@ def upload_activity_document(activity_id):
         flash("🚫 Файл слишком большой (макс. 10 МБ)", "danger")
         return redirect(url_for("activity_view", activity_id=a.id))
 
-    # Распознаём текст
-    recognized_text = extract_text_from_file(save_path)
-
-    # Сохраняем запись в БД
+    # Save first, then let the single OCR worker process it in the background.
     doc = ActivityDocument(
         activity_id=a.id,
         filename=filename,
         filepath=f"uploads/{random_name}",  # 🔗 путь внутри static/
-        doc_rec=recognized_text,
+        ocr_status="queued",
         uploaded_by_id=current_user.id if current_user.id != -1 else None,
     )
     db.session.add(doc)
     add_activity_history(a, "Документ", "Добавлен документ: {}.".format(filename))
     db.session.commit()
+    enqueue_document_ocr("activity", doc.id)
 
-    flash("📄 Документ успешно загружен и распознан", "success")
+    flash("Документ загружен и поставлен в очередь распознавания.", "success")
     return redirect(url_for("activity_view", activity_id=a.id))
 def has_document_access(user_id: int, doc_type: str, doc_id: int) -> bool:
     """Проверка прав на документ активности или письма"""
@@ -2791,21 +3787,19 @@ def upload_letter_document(letter_id: int):
     save_path = os.path.join(upload_dir, random_name)
     f.save(save_path)
 
-    # OCR / Распознавание текста
-    recognized_text = extract_text_from_file(save_path)
-
-    # Сохраняем документ в БД
+    # Save first, then let the single OCR worker process it in the background.
     doc = LetterDocument(
         letter_id=letter.id,
         filename=original_name,
         filepath=f"uploads/{random_name}",
-        doc_rec=recognized_text
+        ocr_status="queued",
     )
 
     db.session.add(doc)
     db.session.commit()
+    enqueue_document_ocr("letter", doc.id)
 
-    flash("📄 Документ успешно загружен и распознан", "success")
+    flash("Документ загружен и поставлен в очередь распознавания.", "success")
     return redirect(url_for("letter_view", letter_id=letter.id))
 @app.get("/letters/<int:letter_id>")
 @login_required
@@ -2835,6 +3829,7 @@ def letter_view(letter_id):
         executor_lookup=executor_lookup,
         source_lookup=source_lookup,
         can_edit=can_edit,
+        has_pending_ocr=any(document.ocr_status in ("queued", "processing") for document in le.documents),
         title=request.form.get("title", "").strip() or f"????? ?? ?????? ?{le.id}"
     )
 
@@ -3447,6 +4442,16 @@ def add_memo():
 @app.get("/admin/settings")
 @role_required("admin", "superadmin")
 def admin_settings():
+    complexity_levels = [
+        {
+            "level": level,
+            "label": meta["label"],
+            "hours": get_app_setting_int(
+                "activity_complexity_hours_{}".format(level), meta["default_hours"]
+            ),
+        }
+        for level, meta in ACTIVITY_COMPLEXITY_META.items()
+    ]
     return render_template(
         "admin_settings.html",
         title="Настройки",
@@ -3456,6 +4461,7 @@ def admin_settings():
         memo_start_number=get_app_setting_int("memo_start_number", 1),
         integration_api_token=get_app_setting("integration_api_token", ""),
         departments=Department.query.order_by(Department.name).all(),
+        complexity_levels=complexity_levels,
     )
 
 
@@ -3478,6 +4484,19 @@ def save_admin_settings():
     if letter_start_number_int < 1 or memo_start_number_int < 1:
         flash("Стартовые номера должны быть больше нуля.", "warning")
         return redirect(url_for("admin_settings"))
+
+    complexity_hours = {}
+    for level, meta in ACTIVITY_COMPLEXITY_META.items():
+        raw_hours = (request.form.get("activity_complexity_hours_{}".format(level)) or "").strip()
+        try:
+            hours = int(raw_hours)
+        except ValueError:
+            flash("Часы по уровню сложности должны быть целыми числами.", "warning")
+            return redirect(url_for("admin_settings"))
+        if hours < 1 or hours > 24:
+            flash("Норма часов по уровню сложности должна быть от 1 до 24.", "warning")
+            return redirect(url_for("admin_settings"))
+        complexity_hours[level] = hours
 
     departments = Department.query.order_by(Department.name).all()
     for department in departments:
@@ -3510,6 +4529,8 @@ def save_admin_settings():
     set_app_setting("memo_prefix", memo_prefix)
     set_app_setting("letter_start_number", str(letter_start_number_int))
     set_app_setting("memo_start_number", str(memo_start_number_int))
+    for level, hours in complexity_hours.items():
+        set_app_setting("activity_complexity_hours_{}".format(level), str(hours))
     db.session.commit()
     flash("Настройки сохранены.", "success")
     return redirect(url_for("admin_settings"))
@@ -3778,12 +4799,16 @@ from sqlalchemy import text, func
 def login_form():
     username = (request.form.get("username") or "").strip()
     password = request.form.get("password") or ""
+    selected_workshop = (request.form.get("workshop_id") or "").strip()
 
     print("=== DEBUG LOGIN ===")
     print("INPUT username:", repr(username))
     print("INPUT password:", repr(password))
 
     if username == SUPERADMIN_LOGIN and password == SUPERADMIN_PASSWORD:
+        if selected_workshop and selected_workshop != "superadmin":
+            flash("Для входа суперадминистратором выберите соответствующий пункт.", "warning")
+            return redirect(url_for("login_page"))
         super_user =  SuperAdmin()
         login_user(super_user, remember=True)
         flash("🔐 Вход выполнен как суперадминистратор", "success")
@@ -3805,6 +4830,22 @@ def login_form():
         flash("Ваш аккаунт ожидает подтверждения администратора.", "info")
         return redirect(url_for("login_page"))
 
+    if not user.is_enabled:
+        flash("Учётная запись отключена администратором.", "warning")
+        return redirect(url_for("login_page"))
+
+    # The browser filters the list too, but validating here prevents selecting
+    # a user from another workshop through a manually crafted request.
+    if selected_workshop:
+        actual_workshop = (
+            str(user.department.workshop_id)
+            if user.department and user.department.workshop_id
+            else "unassigned"
+        )
+        if selected_workshop != actual_workshop:
+            flash("Выбранный сотрудник не относится к указанному цеху.", "warning")
+            return redirect(url_for("login_page"))
+
     # --- Проверка пароля (шифрованного) ---
     try:
         ok = user.check_password(password)
@@ -3822,11 +4863,41 @@ def login_form():
         return redirect(url_for("login_page"))
 
 # --- Админка: список пользователей ---
+def can_manage_user(user):
+    """Администратор работает только с пользователями своего цеха."""
+    if current_user.role == "superadmin":
+        return True
+    workshop_id = current_workshop_id()
+    return (
+        current_user.role == "admin"
+        and workshop_id is not None
+        and user.department is not None
+        and user.department.workshop_id == workshop_id
+    )
+
+
+def departments_available_to_current_admin():
+    query = Department.query.options(joinedload(Department.workshop)).order_by(Department.name)
+    if current_user.role == "superadmin":
+        return query
+    workshop_id = current_workshop_id()
+    return query.filter(Department.workshop_id == workshop_id) if workshop_id else query.filter(False)
+
+
 @app.get("/admin/users")
 @role_required("admin","superadmin")
 def admin_users():
-    users = User.query.order_by(User.created_at.desc()).all()
-    deps = Department.query.order_by(Department.name).all()
+    users_query = User.query.options(
+        joinedload(User.department).joinedload(Department.workshop)
+    ).order_by(User.created_at.desc())
+    if current_user.role != "superadmin":
+        workshop_id = current_workshop_id()
+        users_query = (
+            users_query.join(User.department).filter(Department.workshop_id == workshop_id)
+            if workshop_id else users_query.filter(User.id == current_user.id)
+        )
+    users = users_query.all()
+    deps = departments_available_to_current_admin().all()
     return render_template("admin_users.html", title="Пользователи", users=users, deps=deps)
 
 @app.post("/admin/users")
@@ -3860,6 +4931,16 @@ def admin_add_user():
             flash("Некорректный отдел.", "warning")
             return redirect(url_for("admin_users"))
 
+    department = db.session.get(Department, department_id) if department_id else None
+    if department_id and not department:
+        flash("Выбранный отдел не найден.", "warning")
+        return redirect(url_for("admin_users"))
+    if department and not can_manage_department(department):
+        abort(403)
+    if current_user.role == "admin" and department is None:
+        flash("Для пользователя необходимо выбрать отдел своего цеха.", "warning")
+        return redirect(url_for("admin_users"))
+
     u = User(
         full_name=full_name,
         username=username,
@@ -3879,10 +4960,12 @@ def admin_add_user():
 def edit_user(user_id):
     """Изменение учетной записи без необходимости пересоздавать пользователя."""
     user = User.query.get_or_404(user_id)
+    if not can_manage_user(user):
+        abort(403)
     if user.role in ("admin", "superadmin") and current_user.role != "superadmin":
         abort(403)
 
-    departments = Department.query.order_by(Department.name).all()
+    departments = departments_available_to_current_admin().all()
     allowed_roles = {"worker", "deputy", "manager"}
     if current_user.role == "superadmin":
         allowed_roles.add("admin")
@@ -3915,9 +4998,16 @@ def edit_user(user_id):
             except ValueError:
                 flash("Некорректный отдел.", "warning")
                 return redirect(url_for("edit_user", user_id=user.id))
-            if not db.session.get(Department, department_id):
+            department = db.session.get(Department, department_id)
+            if not department:
                 flash("Выбранный отдел не найден.", "warning")
                 return redirect(url_for("edit_user", user_id=user.id))
+            if not can_manage_department(department):
+                abort(403)
+
+        if current_user.role == "admin" and department_id is None:
+            flash("Для пользователя необходимо выбрать отдел своего цеха.", "warning")
+            return redirect(url_for("edit_user", user_id=user.id))
 
         user.full_name = full_name
         user.username = username
@@ -3942,15 +5032,39 @@ def edit_user(user_id):
 @role_required("admin", "superadmin")
 def approve_user(user_id):
     u = User.query.get_or_404(user_id)
+    if not can_manage_user(u):
+        abort(403)
     u.is_approved = True
     db.session.commit()
     flash(f"Пользователь {u.full_name} подтверждён.")
+    return redirect(url_for("admin_users"))
+
+
+@app.post("/admin/users/<int:user_id>/toggle-enabled")
+@role_required("admin", "superadmin")
+def toggle_user_enabled(user_id):
+    """Disable an account without deleting its documents, tasks, or audit trail."""
+    user = User.query.get_or_404(user_id)
+    if not can_manage_user(user):
+        abort(403)
+    if getattr(current_user, "id", None) == user.id:
+        flash("Нельзя отключить собственную учётную запись.", "warning")
+        return redirect(url_for("admin_users"))
+    if user.role in ("admin", "superadmin") and current_user.role != "superadmin":
+        abort(403)
+
+    user.is_enabled = not user.is_enabled
+    db.session.commit()
+    state = "включена" if user.is_enabled else "отключена"
+    flash(f"Учётная запись {user.full_name} {state}.", "success")
     return redirect(url_for("admin_users"))
 
 @app.post("/admin/users/<int:user_id>/delete")
 @role_required("admin", "superadmin")
 def delete_user(user_id):
     u = User.query.get_or_404(user_id)
+    if not can_manage_user(u):
+        abort(403)
     if getattr(current_user, "id", None) == u.id:
         flash("Нельзя удалить самого себя.", "warning")
         return redirect(url_for("admin_users"))
@@ -3959,18 +5073,21 @@ def delete_user(user_id):
         flash("Удалять администраторов может только суперадминистратор.", "warning")
         return redirect(url_for("admin_users"))
 
-    replacement_user = (
-        User.query
-        .filter(User.id != u.id)
-        .order_by(User.is_approved.desc(), User.created_at.asc())
-        .first()
-    )
+    replacement_query = User.query.filter(User.id != u.id)
+    if current_user.role != "superadmin" and u.department and u.department.workshop_id:
+        replacement_query = replacement_query.join(User.department).filter(
+            Department.workshop_id == u.department.workshop_id
+        )
+    replacement_user = replacement_query.order_by(
+        User.is_approved.desc(), User.created_at.asc()
+    ).first()
     replacement_user_id = replacement_user.id if replacement_user else None
 
     owned_records_count = (
         Activity.query.filter_by(owner_id=u.id).count()
         + Letter.query.filter_by(author_id=u.id).count()
         + Plan.query.filter_by(created_by=u.id).count()
+        + Protocol.query.filter_by(created_by_id=u.id).count()
         + Task.query.filter_by(created_by=u.id).count()
         + GeneralDocument.query.filter_by(uploaded_by=u.id).count()
         + SharedLink.query.filter_by(created_by=u.id).count()
@@ -3984,6 +5101,7 @@ def delete_user(user_id):
         Activity.query.filter_by(approved_by_id=u.id).update({"approved_by_id": None}, synchronize_session=False)
         Letter.query.filter_by(author_id=u.id).update({"author_id": replacement_user_id}, synchronize_session=False)
         Plan.query.filter_by(created_by=u.id).update({"created_by": replacement_user_id}, synchronize_session=False)
+        Protocol.query.filter_by(created_by_id=u.id).update({"created_by_id": replacement_user_id}, synchronize_session=False)
         Task.query.filter_by(created_by=u.id).update({"created_by": replacement_user_id}, synchronize_session=False)
         GeneralDocument.query.filter_by(uploaded_by=u.id).update({"uploaded_by": replacement_user_id}, synchronize_session=False)
         SharedLink.query.filter_by(created_by=u.id).update({"created_by": replacement_user_id}, synchronize_session=False)
@@ -4007,17 +5125,95 @@ def delete_user(user_id):
         return redirect(url_for("admin_users"))
     flash("Пользователь удалён.")
     return redirect(url_for("admin_users"))
-# --- Админка: отделы ---
+# --- Админка: цехи и отделы ---
+def current_workshop_id(user=None):
+    user = user or current_user
+    department = getattr(user, "department", None)
+    return getattr(department, "workshop_id", None) if department else None
+
+
+def can_manage_department(department):
+    if current_user.role == "superadmin":
+        return True
+    workshop_id = current_workshop_id()
+    return (
+        current_user.role == "admin"
+        and workshop_id is not None
+        and department.workshop_id == workshop_id
+    )
+
+
+@app.get("/admin/workshops")
+@role_required("superadmin")
+def admin_workshops():
+    workshops = Workshop.query.order_by(Workshop.name).all()
+    return render_template("admin_workshops.html", title="Цехи", workshops=workshops)
+
+
+@app.post("/admin/workshops")
+@role_required("superadmin")
+def add_workshop():
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        flash("Название цеха не может быть пустым.", "warning")
+    elif Workshop.query.filter_by(name=name).first():
+        flash("Такой цех уже существует.", "warning")
+    else:
+        db.session.add(Workshop(name=name))
+        db.session.commit()
+        flash("Цех «{}» добавлен.".format(name), "success")
+    return redirect(url_for("admin_workshops"))
+
+
+@app.post("/admin/workshops/<int:workshop_id>/edit")
+@role_required("superadmin")
+def edit_workshop(workshop_id):
+    workshop = Workshop.query.get_or_404(workshop_id)
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        flash("Название цеха не может быть пустым.", "warning")
+    elif Workshop.query.filter(Workshop.name == name, Workshop.id != workshop.id).first():
+        flash("Такой цех уже существует.", "warning")
+    else:
+        workshop.name = name
+        db.session.commit()
+        flash("Название цеха изменено.", "success")
+    return redirect(url_for("admin_workshops"))
+
+
+@app.post("/admin/workshops/<int:workshop_id>/delete")
+@role_required("superadmin")
+def delete_workshop(workshop_id):
+    workshop = Workshop.query.get_or_404(workshop_id)
+    if workshop.departments:
+        flash("Сначала перенесите или удалите отделы этого цеха.", "warning")
+        return redirect(url_for("admin_workshops"))
+    db.session.delete(workshop)
+    db.session.commit()
+    flash("Цех удалён.", "success")
+    return redirect(url_for("admin_workshops"))
+
+
 @app.get("/admin/departments")
-@role_required("admin")
+@role_required("admin", "superadmin")
 def admin_departments():
-    deps = Department.query.order_by(Department.name).all()
-    return render_template("admin_departments.html", title="Отделы", deps=deps)
+    workshop_id = current_workshop_id()
+    query = Department.query.options(joinedload(Department.workshop)).order_by(Department.name)
+    if current_user.role != "superadmin":
+        query = query.filter(Department.workshop_id == workshop_id) if workshop_id else query.filter(False)
+    return render_template(
+        "admin_departments.html", title="Отделы", deps=query.all(),
+        workshops=Workshop.query.order_by(Workshop.name).all(),
+        current_workshop_id=workshop_id,
+        current_workshop=db.session.get(Workshop, workshop_id) if workshop_id else None,
+        can_select_workshop=current_user.role == "superadmin",
+    )
 
 @app.post("/admin/departments")
-@role_required("admin")
+@role_required("admin", "superadmin")
 def add_department():
     name = request.form.get("name", "").strip()
+    workshop_raw = (request.form.get("workshop_id") or "").strip()
     if not name:
         flash("Название отдела не может быть пустым.")
         return redirect(url_for("admin_departments"))
@@ -4025,29 +5221,46 @@ def add_department():
         flash("Такой отдел уже существует.")
         return redirect(url_for("admin_departments"))
 
-    d = Department(name=name)
+    workshop_id = int(workshop_raw) if workshop_raw.isdigit() else None
+    if current_user.role != "superadmin":
+        workshop_id = current_workshop_id()
+    if not workshop_id or not db.session.get(Workshop, workshop_id):
+        flash("Выберите цех для отдела.", "warning")
+        return redirect(url_for("admin_departments"))
+    d = Department(name=name, workshop_id=workshop_id)
     db.session.add(d)
     db.session.commit()
     flash(f"Отдел «{name}» добавлен.")
     return redirect(url_for("admin_departments"))
 
 @app.post("/admin/departments/<int:dep_id>/edit")
-@role_required("admin")
+@role_required("admin", "superadmin")
 def edit_department(dep_id):
     d = Department.query.get_or_404(dep_id)
+    if not can_manage_department(d):
+        abort(403)
     name = request.form.get("name", "").strip()
     if not name:
         flash("Название не может быть пустым.")
         return redirect(url_for("admin_departments"))
+    workshop_raw = (request.form.get("workshop_id") or "").strip()
+    if current_user.role == "superadmin" and workshop_raw.isdigit():
+        workshop = db.session.get(Workshop, int(workshop_raw))
+        if not workshop:
+            flash("Выбранный цех не найден.", "warning")
+            return redirect(url_for("admin_departments"))
+        d.workshop_id = workshop.id
     d.name = name
     db.session.commit()
     flash("Изменения сохранены.")
     return redirect(url_for("admin_departments"))
 
 @app.post("/admin/departments/<int:dep_id>/delete")
-@role_required("admin")
+@role_required("admin", "superadmin")
 def delete_department(dep_id):
     d = Department.query.get_or_404(dep_id)
+    if not can_manage_department(d):
+        abort(403)
     db.session.delete(d)
     db.session.commit()
     flash(f"Отдел «{d.name}» удалён.")
@@ -4721,6 +5934,82 @@ def plan_action_redirect(plan):
     return redirect(url_for("plan_detail", plan_id=plan.id))
 
 
+def find_matching_plan_for_activity(activity):
+    """Return the executor's plan covering the task start date, if one exists."""
+    if not activity.owner_id or not activity.start_date:
+        return None
+    task_date = activity.start_date.date()
+    return (
+        Plan.query
+        .filter(
+            Plan.start_date <= task_date,
+            Plan.end_date >= task_date,
+            or_(
+                Plan.created_by == activity.owner_id,
+                Plan.items.any(PlanItem.executor_id == activity.owner_id),
+            ),
+        )
+        .order_by(
+            (Plan.items.any(PlanItem.executor_id == activity.owner_id)).desc(),
+            Plan.start_date.desc(),
+            Plan.id.desc(),
+        )
+        .first()
+    )
+
+
+def add_pending_activities_to_plan(plan):
+    """Attach opted-in tasks when a plan for their executor and month appears."""
+    executor_ids = {item.executor_id for item in plan.items if item.executor_id}
+    if not executor_ids:
+        return 0
+
+    period_start = dt.datetime.combine(plan.start_date, dt.time.min)
+    period_end = dt.datetime.combine(plan.end_date + dt.timedelta(days=1), dt.time.min)
+    already_linked_ids = {
+        item.linked_activity_id for item in plan.items if item.linked_activity_id
+    }
+    activities = (
+        Activity.query
+        .filter(
+            Activity.plan_requested.is_(True),
+            Activity.plan_id.is_(None),
+            Activity.owner_id.in_(executor_ids),
+            Activity.start_date >= period_start,
+            Activity.start_date < period_end,
+        )
+        .order_by(Activity.start_date, Activity.id)
+        .all()
+    )
+    position = max((item.position for item in plan.items), default=0)
+    added = 0
+    for activity in activities:
+        if activity.id in already_linked_ids:
+            activity.plan_requested = False
+            continue
+        position += 1
+        deadline_date = activity.end_date.date() if activity.end_date else None
+        db.session.add(PlanItem(
+            plan_id=plan.id,
+            executor_id=activity.owner_id,
+            position=position,
+            task_text=activity.title,
+            deadline_kind="date" if deadline_date else "month",
+            deadline_date=deadline_date,
+            linked_activity_id=activity.id,
+            status="planned",
+        ))
+        activity.plan_id = plan.id
+        activity.plan_requested = False
+        add_activity_history(
+            activity,
+            "Добавление в план",
+            "Задача автоматически добавлена в план «{}».".format(plan.plan_text),
+        )
+        added += 1
+    return added
+
+
 @app.route("/plans/create", methods=["GET", "POST"])
 @login_required
 def plan_create():
@@ -4778,8 +6067,13 @@ def plan_create():
                 plan_id=p.id, executor_id=executor_id, position=position,
                 task_text=task, deadline_kind=deadline, deadline_date=deadline_date, status="planned",
             ))
+        db.session.flush()
+        auto_added = add_pending_activities_to_plan(p)
         db.session.commit()
-        flash("План и его пункты созданы", "success")
+        message = "План и его пункты созданы"
+        if auto_added:
+            message += ". Задач автоматически добавлено: {}".format(auto_added)
+        flash(message, "success")
         return redirect(url_for("plan_detail", plan_id=p.id))
 
     is_manager = current_user.role in ("admin", "superadmin")
@@ -6436,6 +7730,8 @@ def toggle_admin(user_id):
 @role_required("admin", "superadmin")
 def update_user_role(user_id):
     user = User.query.get_or_404(user_id)
+    if not can_manage_user(user):
+        abort(403)
     role = (request.form.get("role") or "worker").strip()
     allowed_roles = {"worker", "deputy", "manager"}
     if current_user.role == "superadmin":
@@ -6451,6 +7747,8 @@ def update_user_role(user_id):
 def admin_show_password(user_id):
     """Просмотр расшифрованного пароля"""
     u = User.query.get_or_404(user_id)
+    if not can_manage_user(u):
+        abort(403)
     try:
         decrypted = decrypt_str(u.password_enc, SECRET_PASSPHRASE)
     except Exception:
@@ -6572,6 +7870,7 @@ if __name__ == "__main__":
         db.create_all()
         init_fts_indexes()  # <=== 👈 вызываем вручную при запуске
         print("✔ Проверка таблиц выполнена:", [t.name for t in db.metadata.sorted_tables])
+    start_ocr_worker()
     app.run(
         host="0.0.0.0",
         port=5001,

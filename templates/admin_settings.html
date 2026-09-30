@@ -30,6 +30,20 @@
 
     <div class="col-12">
       <hr>
+      <h5>Трудозатраты задач</h5>
+      <div class="form-text mb-2">Норма показывает, сколько рабочих часов в день занимает задача соответствующего уровня сложности. Итог считается по рабочим дням от даты начала до срока включительно.</div>
+      <div class="row g-3">
+        {% for level in complexity_levels %}
+        <div class="col-md">
+          <label class="form-label">{{ level.label }}</label>
+          <div class="input-group"><input type="number" min="1" max="24" step="1" name="activity_complexity_hours_{{ level.level }}" class="form-control" value="{{ level.hours }}" required><span class="input-group-text">ч/день</span></div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="col-12">
+      <hr>
       <h5>Префиксы отделов</h5>
       <div class="form-text mb-2">Эти значения имеют приоритет над настройками по умолчанию. Оставьте поле пустым, чтобы использовать общий префикс.</div>
       <div class="table-responsive">

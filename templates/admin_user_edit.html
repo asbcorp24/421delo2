@@ -25,7 +25,7 @@
         <select name="department_id" class="form-select">
           <option value="">-- не указан --</option>
           {% for department in departments %}
-          <option value="{{ department.id }}" {% if user.department_id == department.id %}selected{% endif %}>{{ department.name }}</option>
+          <option value="{{ department.id }}" {% if user.department_id == department.id %}selected{% endif %}>{{ department.workshop.name if department.workshop else 'Без цеха' }} / {{ department.name }}</option>
           {% endfor %}
         </select>
       </div>

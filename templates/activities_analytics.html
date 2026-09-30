@@ -1,10 +1,18 @@
 {% extends 'layout.html' %}
+{% block main_container_class %}activities-analytics-container{% endblock %}
 {% block content %}
-<div class="container mt-4">
+<style>
+@media (min-width: 992px) {
+  .activities-analytics-container { max-width: calc(100vw - 32px) !important; }
+}
+.activities-analytics-table { font-size: .84rem; white-space: nowrap; }
+.activities-analytics-table th, .activities-analytics-table td { padding: .52rem .48rem; }
+</style>
+<div class="mt-4">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div>
       <h3 class="mb-1">Аналитика задач</h3>
-      <div class="text-muted">Общая сводка, показатели отделов и сотрудников</div>
+      <div class="text-muted">Количество задач, выполнение и качество с учетом уровня сложности</div>
     </div>
     <div class="d-flex gap-2">
       <a href="{{ url_for('activities_page') }}" class="btn btn-outline-info">К задачам</a>
@@ -52,27 +60,31 @@
     <div class="col-6 col-lg-2"><div class="card bg-dark border-warning h-100"><div class="card-body"><small class="text-warning">В работе</small><div class="display-6 text-light">{{ summary.in_progress }}</div></div></div></div>
     <div class="col-6 col-lg-2"><div class="card bg-dark border-secondary h-100"><div class="card-body"><small class="text-secondary">Перенос / отмена</small><div class="display-6 text-light">{{ summary.postponed + summary.cancelled }}</div></div></div></div>
     <div class="col-6 col-lg-2"><div class="card bg-dark border-info h-100"><div class="card-body"><small class="text-info">Выполнение</small><div class="display-6 text-light">{{ summary.completion }}%</div></div></div></div>
+    <div class="col-6 col-lg-2"><div class="card bg-dark border-primary h-100"><div class="card-body"><small class="text-primary">По сложности</small><div class="display-6 text-light">{{ summary.complexity_completion }}%</div></div></div></div>
+    <div class="col-6 col-lg-2"><div class="card bg-dark border-success h-100"><div class="card-body"><small class="text-success">Качество</small><div class="display-6 text-light">{{ summary.quality }}%</div></div></div></div>
+    <div class="col-12"><div class="small text-muted">Качество = среднее между процентом выполнения по количеству задач и процентом выполнения с учетом сложности. Отменённые задачи в расчёт не входят. Оценочная нагрузка: {{ summary.workload_hours }} ч.</div></div>
   </div>
 
   <div class="row g-3 mb-4 print-chart">
     <div class="col-lg-4"><div class="card bg-dark border-info h-100"><div class="card-body"><h5 class="text-info">Общий статус</h5><canvas id="statusChart"></canvas></div></div></div>
-    <div class="col-lg-8"><div class="card bg-dark border-info h-100"><div class="card-body"><h5 class="text-info">Задачи по отделам</h5><canvas id="departmentsChart"></canvas></div></div></div>
+    <div class="col-lg-4"><div class="card bg-dark border-success h-100"><div class="card-body"><h5 class="text-success">Качество по отделам</h5><canvas id="qualityChart"></canvas></div></div></div>
+    <div class="col-lg-4"><div class="card bg-dark border-info h-100"><div class="card-body"><h5 class="text-info">Задачи по отделам</h5><canvas id="departmentsChart"></canvas></div></div></div>
   </div>
 
   <div class="card bg-dark border-info mb-4">
     <div class="card-header text-info">Сводка по отделам</div>
-    <div class="table-responsive"><table class="table table-dark table-hover align-middle mb-0">
-      <thead><tr><th>Отдел</th><th>Всего</th><th>Выполнено</th><th>Не выполнено</th><th>В работе</th><th>Перенос</th><th>Отменено</th><th>Выполнение</th></tr></thead>
-      <tbody>{% for row in department_rows %}<tr><td class="fw-semibold">{{ row.name }}</td><td>{{ row.total }}</td><td><span class="badge bg-success">{{ row.done }}</span></td><td><span class="badge bg-danger">{{ row.not_done }}</span></td><td><span class="badge bg-warning text-dark">{{ row.in_progress }}</span></td><td>{{ row.postponed }}</td><td>{{ row.cancelled }}</td><td style="min-width:150px"><div class="progress" style="height:10px"><div class="progress-bar bg-info" style="width:{{ row.completion }}%"></div></div><small>{{ row.completion }}%</small></td></tr>{% else %}<tr><td colspan="8" class="text-center text-muted py-4">Задач за выбранный период нет.</td></tr>{% endfor %}</tbody>
+    <div class="table-responsive"><table class="table table-dark table-hover align-middle mb-0 activities-analytics-table">
+      <thead><tr><th>Отдел</th><th>Всего</th><th>Выполнено</th><th>Не выполнено</th><th>В работе</th><th>Перенос</th><th>Отменено</th><th>Выполнение</th><th>Сложность</th><th>Качество</th><th>Нагрузка</th></tr></thead>
+      <tbody>{% for row in department_rows %}<tr><td class="fw-semibold">{{ row.name }}</td><td>{{ row.total }}</td><td><span class="badge bg-success">{{ row.done }}</span></td><td><span class="badge bg-danger">{{ row.not_done }}</span></td><td><span class="badge bg-warning text-dark">{{ row.in_progress }}</span></td><td>{{ row.postponed }}</td><td>{{ row.cancelled }}</td><td style="min-width:120px"><div class="progress" style="height:10px"><div class="progress-bar bg-info" style="width:{{ row.completion }}%"></div></div><small>{{ row.completion }}%</small></td><td>{{ row.complexity_done }} / {{ row.complexity_total }}<div class="small text-muted">{{ row.complexity_completion }}%</div></td><td><span class="badge bg-success">{{ row.quality }}%</span></td><td>{{ row.workload_hours }} ч</td></tr>{% else %}<tr><td colspan="11" class="text-center text-muted py-4">Задач за выбранный период нет.</td></tr>{% endfor %}</tbody>
     </table></div>
   </div>
 
   <div class="card bg-dark border-info mb-4 print-chart"><div class="card-body"><h5 class="text-info">Задачи по сотрудникам</h5><canvas id="usersChart"></canvas></div></div>
   <div class="card bg-dark border-info mb-4">
     <div class="card-header text-info">Сводка по сотрудникам</div>
-    <div class="table-responsive"><table class="table table-dark table-hover align-middle mb-0">
-      <thead><tr><th>Сотрудник</th><th>Отдел</th><th>Всего</th><th>Выполнено</th><th>Не выполнено</th><th>В работе</th><th>Перенос</th><th>Отменено</th><th>Выполнение</th></tr></thead>
-      <tbody>{% for row in user_rows %}<tr><td class="fw-semibold">{{ row.name }}</td><td>{{ row.department }}</td><td>{{ row.total }}</td><td><span class="badge bg-success">{{ row.done }}</span></td><td><span class="badge bg-danger">{{ row.not_done }}</span></td><td><span class="badge bg-warning text-dark">{{ row.in_progress }}</span></td><td>{{ row.postponed }}</td><td>{{ row.cancelled }}</td><td>{{ row.completion }}%</td></tr>{% else %}<tr><td colspan="9" class="text-center text-muted py-4">Данных нет.</td></tr>{% endfor %}</tbody>
+    <div class="table-responsive"><table class="table table-dark table-hover align-middle mb-0 activities-analytics-table">
+      <thead><tr><th>Сотрудник</th><th>Отдел</th><th>Всего</th><th>Выполнено</th><th>Не выполнено</th><th>В работе</th><th>Перенос</th><th>Отменено</th><th>Выполнение</th><th>Сложность</th><th>Качество</th><th>Нагрузка</th></tr></thead>
+      <tbody>{% for row in user_rows %}<tr><td class="fw-semibold">{{ row.name }}</td><td>{{ row.department }}</td><td>{{ row.total }}</td><td><span class="badge bg-success">{{ row.done }}</span></td><td><span class="badge bg-danger">{{ row.not_done }}</span></td><td><span class="badge bg-warning text-dark">{{ row.in_progress }}</span></td><td>{{ row.postponed }}</td><td>{{ row.cancelled }}</td><td>{{ row.completion }}%</td><td>{{ row.complexity_done }} / {{ row.complexity_total }}<div class="small text-muted">{{ row.complexity_completion }}%</div></td><td><span class="badge bg-success">{{ row.quality }}%</span></td><td>{{ row.workload_hours }} ч</td></tr>{% else %}<tr><td colspan="12" class="text-center text-muted py-4">Данных нет.</td></tr>{% endfor %}</tbody>
     </table></div>
   </div>
 
@@ -91,6 +103,7 @@ new Chart(document.getElementById('statusChart'), { type: 'doughnut', data: { la
 function stackedChart(element, labels, done, notDone, work) { new Chart(document.getElementById(element), { type: 'bar', data: { labels, datasets: [{ label: 'Выполнено', data: done, backgroundColor: '#198754' }, { label: 'Не выполнено', data: notDone, backgroundColor: '#dc3545' }, { label: 'В работе / перенос', data: work, backgroundColor: '#ffc107' }] }, options: { responsive: true, scales: { x: { ...axis, stacked: true }, y: { ...axis, stacked: true, beginAtZero: true } }, plugins: { legend } } }); }
 stackedChart('departmentsChart', chartData.department_labels, chartData.department_done, chartData.department_not_done, chartData.department_work);
 stackedChart('usersChart', chartData.user_labels, chartData.user_done, chartData.user_not_done, chartData.user_work);
+new Chart(document.getElementById('qualityChart'), { type: 'bar', data: { labels: chartData.department_labels, datasets: [{ label: 'Качество', data: chartData.department_quality, backgroundColor: '#198754' }, { label: 'Выполнение', data: chartData.department_completion, backgroundColor: '#0dcaf0' }, { label: 'По сложности', data: chartData.department_complexity_completion, backgroundColor: '#6f42c1' }] }, options: { responsive: true, scales: { x: axis, y: { ...axis, beginAtZero: true, max: 100 } }, plugins: { legend } } });
 new Chart(document.getElementById('extraValuesChart'), { type: 'bar', data: { labels: chartData.extra_labels, datasets: [{ label: 'Задач с показателем', data: chartData.extra_tasks_count, backgroundColor: '#00bcd4' }] }, options: { indexAxis: 'y', scales: { x: { ...axis, beginAtZero: true }, y: axis }, plugins: { legend } } });
 </script>
 <style>@media print { nav, footer, form, .btn, .alert { display:none !important; } .container { max-width:100% !important; } .card { border:1px solid #999 !important; box-shadow:none !important; } .print-chart { break-inside:avoid; } }</style>

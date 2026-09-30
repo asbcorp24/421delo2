@@ -5,14 +5,29 @@
     <h3 class="mb-3 text-center">Вход</h3>
     <form method="post" action="{{ url_for('login_form') }}">
       <div class="mb-3">
-        <label class="form-label">Логин</label>
-        <select name="username" class="form-select" required>
-          <option value="">-- выберите себя --</option>
+        <label class="form-label" for="workshopSelect">Цех</label>
+        <select id="workshopSelect" name="workshop_id" class="form-select" required>
+          <option value="">-- выберите цех --</option>
+          {% for workshop in workshops %}
+          <option value="{{ workshop.id }}">{{ workshop.name }}</option>
+          {% endfor %}
+          {% if has_unassigned_users %}
+          <option value="unassigned">Без назначенного цеха</option>
+          {% endif %}
           {% if superadmin_login %}
-          <option value="{{ superadmin_login }}">Суперадминистратор</option>
+          <option value="superadmin">Суперадминистратор</option>
+          {% endif %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="loginUserSelect">ФИО</label>
+        <select id="loginUserSelect" name="username" class="form-select" required disabled>
+          <option value="">-- сначала выберите цех --</option>
+          {% if superadmin_login %}
+          <option value="{{ superadmin_login }}" data-workshop="superadmin" hidden>Суперадминистратор</option>
           {% endif %}
           {% for user in login_users %}
-          <option value="{{ user.username }}">{{ user.full_name }}</option>
+          <option value="{{ user.username }}" data-workshop="{{ user.department.workshop_id if user.department and user.department.workshop_id else 'unassigned' }}" hidden>{{ user.full_name }}</option>
           {% endfor %}
         </select>
       </div>
@@ -22,12 +37,24 @@
       </div>
       <button type="submit" class="btn btn-primary w-100">Войти</button>
     </form>
-
-    <div class="text-center mt-3">
-      <a href="{{ url_for('register_page') }}" class="text-decoration-none">
-        📝 Зарегистрироваться
-      </a>
-    </div>
   </div>
 </div>
+<script>
+(() => {
+  const workshop = document.getElementById('workshopSelect');
+  const user = document.getElementById('loginUserSelect');
+  const placeholder = user.options[0];
+
+  workshop.addEventListener('change', () => {
+    const selectedWorkshop = workshop.value;
+    user.value = '';
+    user.disabled = !selectedWorkshop;
+    placeholder.textContent = selectedWorkshop ? '-- выберите себя --' : '-- сначала выберите цех --';
+    Array.from(user.options).forEach((option, index) => {
+      if (index === 0) return;
+      option.hidden = option.dataset.workshop !== selectedWorkshop;
+    });
+  });
+})();
+</script>
 {% endblock %}

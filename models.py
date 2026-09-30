@@ -49,6 +49,7 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), nullable=False, default="worker")
     department_id = db.Column(db.Integer, db.ForeignKey("departments.id"))
     is_approved = db.Column(db.Boolean, default=False, nullable=False)
+    is_enabled = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
 
     department = db.relationship("Department", backref="users")
@@ -65,10 +66,24 @@ class User(UserMixin, db.Model):
         except Exception as e:
             print("❌ decrypt error:", e)
             return False
+
+    @property
+    def is_active(self):
+        """Flask-Login uses this property to reject disabled accounts."""
+        return bool(self.is_enabled)
+class Workshop(db.Model):
+    __tablename__ = "workshops"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
 class Department(db.Model):
     __tablename__ = "departments"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), unique=True, nullable=False)
+    workshop_id = db.Column(db.Integer, db.ForeignKey("workshops.id"))
+    workshop = db.relationship("Workshop", backref="departments")
     letter_prefix = db.Column(db.String(100))
     memo_prefix = db.Column(db.String(100))
     letter_start_number = db.Column(db.Integer)
@@ -154,7 +169,11 @@ class Activity(db.Model):
     end_date = db.Column(db.DateTime)
     status = db.Column(db.String(32), default="open")
     priority = db.Column(db.Integer, nullable=False, default=3)
+    complexity_level = db.Column(db.Integer, nullable=False, default=3)
     plan_id = db.Column(db.Integer, db.ForeignKey("plans.id"))
+    # The task was created with "add to plan" selected, but its monthly plan
+    # did not exist yet. It is consumed when a suitable plan is created.
+    plan_requested = db.Column(db.Boolean, nullable=False, default=False)
     approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     approved_by = db.relationship("User", foreign_keys=[approved_by_id])
     approved_at = db.Column(db.DateTime)
@@ -201,6 +220,10 @@ class ActivityDocument(db.Model):
 
     activity = db.relationship("Activity", backref="documents")
     doc_rec = db.Column(db.Text)  # ✅ сюда сохраняем распознанный текст
+    ocr_status = db.Column(db.String(20), nullable=False, default="completed")
+    ocr_error = db.Column(db.Text)
+    ocr_started_at = db.Column(db.DateTime)
+    ocr_completed_at = db.Column(db.DateTime)
 
 class ActivityHistory(db.Model):
     __tablename__ = "activity_history"
@@ -279,6 +302,10 @@ class LetterDocument(db.Model):
     filename = db.Column(db.String(255), nullable=False)
     filepath = db.Column(db.String(255), nullable=False)
     doc_rec = db.Column(db.Text)  # ✅ сюда сохраняем распознанный текст
+    ocr_status = db.Column(db.String(20), nullable=False, default="completed")
+    ocr_error = db.Column(db.Text)
+    ocr_started_at = db.Column(db.DateTime)
+    ocr_completed_at = db.Column(db.DateTime)
 
 class ActivityLog(db.Model):
     __tablename__ = "activity_logs"
@@ -362,6 +389,43 @@ class PlanItem(db.Model):
     executor = db.relationship("User", foreign_keys=[executor_id], backref="plan_items")
     execution_approved_by = db.relationship("User", foreign_keys=[execution_approved_by_id])
     linked_activity = db.relationship("Activity", foreign_keys=[linked_activity_id])
+
+
+class Protocol(db.Model):
+    """Administrative document grouping existing tasks into a protocol."""
+    __tablename__ = "protocols"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    protocol_date = db.Column(db.Date, nullable=False, default=dt.date.today)
+    description = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+
+    creator = db.relationship("User", foreign_keys=[created_by_id], backref="created_protocols")
+    items = db.relationship(
+        "ProtocolItem",
+        backref="protocol",
+        cascade="all, delete-orphan",
+        order_by="ProtocolItem.position",
+    )
+
+
+class ProtocolItem(db.Model):
+    __tablename__ = "protocol_items"
+    __table_args__ = (db.UniqueConstraint("protocol_id", "activity_id", name="uq_protocol_item_activity"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    protocol_id = db.Column(db.Integer, db.ForeignKey("protocols.id"), nullable=False)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activities.id"), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=1)
+    due_date = db.Column(db.Date)
+    comment = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+
+    activity = db.relationship("Activity", foreign_keys=[activity_id])
+
+
 class DocumentAccess(db.Model):
     __tablename__ = "document_access"
     id = db.Column(db.Integer, primary_key=True)
@@ -503,6 +567,7 @@ class MemoTemplate(db.Model):
 
 __all__ = [
     "db",
+    "Workshop",
     "Department",
     "User",
     "ActivityType",
@@ -513,7 +578,7 @@ __all__ = [
     "Letter",
     "LetterRecipient",
     "LetterActivityLink",
-    "LetterLetterLink","LetterDocument","ValueTemplate","PlanExecutor","Plan","PlanItem","DocumentAccess","ChatMessage",
+    "LetterLetterLink","LetterDocument","ValueTemplate","PlanExecutor","Plan","PlanItem","Protocol","ProtocolItem","DocumentAccess","ChatMessage",
     "DownloadLog","GeneralDocument","SharedLink","Task","TaskAssignee","UserNotification","ActivityHistory",
     "ActivityTemplate", "MemoTemplate"
 ]

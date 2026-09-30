@@ -113,13 +113,14 @@
     </select>
   </div>
 
+  {% endif %}
+
   <div class="col-auto">
     <div class="form-check mt-4 pt-2">
       <input class="form-check-input" type="checkbox" value="1" id="my_only" name="my_only" {% if my_only %}checked{% endif %}>
       <label class="form-check-label" for="my_only">Свои задачи</label>
     </div>
   </div>
-  {% endif %}
 
   <div class="col-auto">
     <div class="form-check mt-4 pt-2">
@@ -142,6 +143,8 @@
       <th>Тема</th>
       <th>Название</th>
       <th>Приоритет</th>
+      <th>Сложность</th>
+      <th>Часы</th>
       <th>Тип</th>
       <th>Исходный документ</th>
       <th>Ответственный</th>
@@ -161,6 +164,10 @@
         <td>{{ a.title }}</td>
         {% set priority_meta = get_priority_meta(a.priority) %}
         <td><span class="badge {{ priority_meta.class }}">{{ priority_meta.label }}</span></td>
+        {% set complexity_meta = get_complexity_meta(a.complexity_level) %}
+        {% set effort_hours = calculate_effort_hours(a) %}
+        <td><span class="badge {{ complexity_meta.class }}">{{ complexity_meta.level }}</span><div class="small text-muted">{{ complexity_meta.daily_hours }} ч/д</div></td>
+        <td>{% if effort_hours is not none %}{{ effort_hours }} ч{% else %}-{% endif %}</td>
         <td>{{ a.type.name if a.type else '-' }}</td>
         <td>{{ a.outgoing_document or '-' }}</td>
         <td>{% if a.owner_id == -1 %}Суперадминистратор{% else %}{{ a.owner.full_name if a.owner else '-' }}{% endif %}</td>
@@ -176,7 +183,7 @@
       </tr>
     {% else %}
       <tr>
-        <td colspan="12" class="text-center text-muted">Задач пока нет</td>
+        <td colspan="14" class="text-center text-muted">Задач пока нет</td>
       </tr>
     {% endfor %}
   </tbody>

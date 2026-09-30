@@ -1,0 +1,116 @@
+{% extends 'layout.html' %}
+{% block content %}
+<style>
+.protocol-task-picker { position: relative; }
+.protocol-task-picker-menu { display: none; position: absolute; z-index: 1050; top: calc(100% + 2px); width: 100%; max-height: 280px; overflow-y: auto; background: #17202a; border: 1px solid #0dcaf0; border-radius: .375rem; box-shadow: 0 10px 24px rgba(0, 0, 0, .35); }
+.protocol-task-picker-menu.is-open { display: block; }
+.protocol-task-picker-item { display: block; width: 100%; padding: .55rem .75rem; border: 0; border-bottom: 1px solid rgba(255,255,255,.08); background: transparent; color: #e9ecef; text-align: left; }
+.protocol-task-picker-item:hover, .protocol-task-picker-item:focus { background: #0d6efd; color: #fff; outline: 0; }
+.protocol-task-picker-item small { display: block; opacity: .75; }
+</style>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <div class="text-muted small">Протокол №{{ protocol.id }} от {{ protocol.protocol_date.strftime('%d.%m.%Y') }}</div>
+    <h3 class="mb-1">{{ protocol.title }}</h3>
+    {% if protocol.description %}<div class="text-muted">{{ protocol.description }}</div>{% endif %}
+  </div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('protocols_page') }}">К протоколам</a>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="card bg-dark border-info h-100"><div class="card-body">
+      <h5 class="mb-3">Добавить готовую задачу</h5>
+      <form method="post" action="{{ url_for('protocol_add_item', protocol_id=protocol.id) }}" class="row g-3">
+        <div class="col-12">
+          <label class="form-label" for="protocolTaskSearch">Задача</label>
+          <div class="protocol-task-picker">
+            <input id="protocolTaskSearch" class="form-control" autocomplete="off" placeholder="Введите номер, название или исполнителя">
+            <input id="protocolActivityId" name="activity_id" type="hidden">
+            <div id="protocolTaskMenu" class="protocol-task-picker-menu" role="listbox">
+              {% for activity in available_activities %}
+              <button type="button" class="protocol-task-picker-item" data-id="{{ activity.id }}" data-label="#{{ activity.id }} · {{ activity.title }}" data-search="{{ activity.id }} {{ activity.title }} {{ activity.owner.full_name if activity.owner else '' }}">
+                #{{ activity.id }} · {{ activity.title }}
+                <small>{{ activity.owner.full_name if activity.owner else 'Исполнитель не назначен' }}{% if activity.end_date %} · до {{ activity.end_date.strftime('%d.%m.%Y') }}{% endif %}</small>
+              </button>
+              {% else %}
+              <div class="p-3 text-muted">Нет задач, которые можно добавить.</div>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="form-text">Список открывается при нажатии на поле. Уже добавленные в этот протокол задачи скрыты.</div>
+        </div>
+        <div class="col-12"><label class="form-label">Примечание</label><textarea name="comment" class="form-control" rows="2" placeholder="Уточнение пункта"></textarea></div>
+        <div class="col-12"><button class="btn btn-success">Добавить в протокол</button></div>
+      </form>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card bg-dark border-success h-100"><div class="card-body">
+      <h5 class="mb-3">Создать новую задачу</h5>
+      <form method="post" action="{{ url_for('protocol_create_task', protocol_id=protocol.id) }}" class="row g-3">
+        <div class="col-md-7"><label class="form-label">Название</label><input name="title" class="form-control" required></div>
+        <div class="col-md-5"><label class="form-label">Тип</label><select name="type_id" class="form-select" required><option value="">-- выберите --</option>{% for item_type in activity_types %}<option value="{{ item_type.id }}">{{ item_type.name }}</option>{% endfor %}</select></div>
+        <div class="col-md-6"><label class="form-label">Исполнитель</label><select name="owner_id" class="form-select" required><option value="">-- выберите --</option>{% for user in users %}<option value="{{ user.id }}">{{ user.full_name }}{% if user.department %} ({{ user.department.name }}){% endif %}</option>{% endfor %}</select></div>
+        <div class="col-md-3"><label class="form-label">Начало</label><input type="date" name="start_date" value="{{ protocol.protocol_date.isoformat() }}" class="form-control" required></div>
+        <div class="col-md-3"><label class="form-label">Выполнить до</label><input type="date" name="end_date" class="form-control" required></div>
+        <div class="col-md-3"><label class="form-label">Приоритет</label><select name="priority" class="form-select"><option value="1">1 - низкий</option><option value="2">2 - обычный</option><option value="3" selected>3 - средний</option><option value="4">4 - высокий</option><option value="5">5 - критический</option></select></div>
+        <div class="col-md-3"><label class="form-label">Сложность</label><select name="complexity_level" class="form-select"><option value="1">1 - простая</option><option value="2">2 - базовая</option><option value="3" selected>3 - средняя</option><option value="4">4 - высокая</option><option value="5">5 - критическая</option></select></div>
+        <div class="col-md-6"><label class="form-label">Описание</label><input name="description" class="form-control" placeholder="Необязательно"></div>
+        <div class="col-12"><button class="btn btn-outline-success">Создать и добавить</button></div>
+      </form>
+    </div></div>
+  </div>
+</div>
+
+<div class="card bg-dark border-info"><div class="table-responsive">
+  <table class="table table-dark table-hover align-middle mb-0">
+    <thead><tr><th>№</th><th>Задача</th><th>Исполнитель</th><th>Сложность</th><th>Трудозатраты</th><th>Выполнить до</th><th>Статус</th><th>Информация о выполнении</th><th></th></tr></thead>
+    <tbody>
+      {% for item in protocol.items %}
+      {% set activity = item.activity %}
+      {% set meta = get_status_meta(activity.status) %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td><a href="{{ url_for('activity_view', activity_id=activity.id) }}" class="link-info">#{{ activity.id }} {{ activity.title }}</a>{% if item.comment %}<div class="small text-muted">{{ item.comment }}</div>{% endif %}</td>
+        <td>{{ activity.owner.full_name if activity.owner else '-' }}</td>
+        {% set complexity = get_complexity_meta(activity.complexity_level) %}
+        {% set effort = calculate_effort_hours(activity) %}
+        <td><span class="badge {{ complexity.class }}">{{ complexity.label }}</span><div class="small text-muted">{{ complexity.daily_hours }} ч/день</div></td>
+        <td>{% if effort is not none %}{{ effort }} ч{% else %}-{% endif %}</td>
+        <td class="text-nowrap">{% if activity.end_date %}{{ activity.end_date.strftime('%d.%m.%Y') }}{% else %}-{% endif %}</td>
+        <td><span class="badge {{ meta.class }}" {% if meta.style %}style="{{ meta.style }}"{% endif %}>{{ meta.label }}</span></td>
+        <td>{% if activity.status_comment %}{{ activity.status_comment }}{% elif activity.status == 'done' %}<span class="text-success">Выполнено</span>{% elif activity.status == 'not_done' %}<span class="text-danger">Не выполнено</span>{% else %}<span class="text-muted">Нет информации</span>{% endif %}</td>
+        <td><form method="post" action="{{ url_for('protocol_delete_item', protocol_id=protocol.id, item_id=item.id) }}" onsubmit="return confirm('Исключить задачу из протокола?')"><button class="btn btn-sm btn-outline-danger">Убрать</button></form></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="text-center text-muted py-4">Задачи в протокол пока не добавлены.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div></div>
+
+<script>
+(() => {
+  const input = document.getElementById('protocolTaskSearch');
+  const activityId = document.getElementById('protocolActivityId');
+  const menu = document.getElementById('protocolTaskMenu');
+  const items = Array.from(menu.querySelectorAll('.protocol-task-picker-item'));
+  const showMenu = () => menu.classList.add('is-open');
+  const filterItems = () => {
+    const query = input.value.trim().toLowerCase();
+    items.forEach((item) => { item.hidden = query && !item.dataset.search.toLowerCase().includes(query); });
+  };
+  input.addEventListener('focus', () => { showMenu(); filterItems(); });
+  input.addEventListener('input', () => { activityId.value = ''; showMenu(); filterItems(); });
+  items.forEach((item) => item.addEventListener('click', () => {
+    activityId.value = item.dataset.id;
+    input.value = item.dataset.label;
+    menu.classList.remove('is-open');
+  }));
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.protocol-task-picker')) menu.classList.remove('is-open');
+  });
+})();
+</script>
+{% endblock %}

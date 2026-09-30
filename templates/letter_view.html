@@ -51,7 +51,12 @@
         <a href="{{ url_for('download_letter_document', doc_id=d.id) }}" class="text-decoration-none">
           📄 {{ d.filename }}
         </a>
+        {% if d.ocr_status == 'queued' %}<div><span class="badge bg-secondary">В очереди распознавания</span></div>
+        {% elif d.ocr_status == 'processing' %}<div><span class="badge bg-info text-dark">Распознаётся</span></div>
+        {% elif d.ocr_status == 'failed' %}<div><span class="badge bg-danger">Ошибка распознавания</span>{% if d.ocr_error %}<small class="text-danger d-block">{{ d.ocr_error }}</small>{% endif %}</div>
+        {% elif d.ocr_status == 'completed' and not d.doc_rec %}<div><small class="text-muted">Текст не обнаружен</small></div>{% endif %}
       </div>
+      {% if d.doc_rec %}
       <div>
         <button type="button"
                 class="btn btn-sm btn-outline-info"
@@ -61,6 +66,7 @@
           👁 Просмотреть содержимое
         </button>
       </div>
+      {% endif %}
     </li>
   {% else %}
     <li class="text-muted">Нет документов</li>
@@ -76,6 +82,9 @@
   <div class="alert alert-info">Редактирование документов недоступно — вы не автор письма.</div>
 {% endif %}
 
+{% if has_pending_ocr %}
+<script>setTimeout(function () { window.location.reload(); }, 5000);</script>
+{% endif %}
 
 <hr>
 <hr>

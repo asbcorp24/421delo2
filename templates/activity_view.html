@@ -64,6 +64,10 @@
     <tr><th>Тип задачи</th><td>{{ a.type.name if a.type else '-' }}</td></tr>
     <tr><th>Исполнитель</th><td>{{ a.owner.full_name if a.owner else '-' }}</td></tr>
     <tr><th>Приоритет</th><td>{{ get_priority_meta(a.priority).label }}</td></tr>
+    {% set print_complexity = get_complexity_meta(a.complexity_level) %}
+    {% set print_effort = calculate_effort_hours(a) %}
+    <tr><th>Уровень сложности</th><td>{{ print_complexity.label }} ({{ print_complexity.daily_hours }} ч/рабочий день)</td></tr>
+    <tr><th>Расчётные трудозатраты</th><td>{% if print_effort is not none %}{{ print_effort }} ч.{% else %}Не рассчитываются: не указан срок исполнения.{% endif %}</td></tr>
     <tr><th>Дата начала</th><td>{{ a.start_date.strftime('%d.%m.%Y') if a.start_date else '-' }}</td></tr>
     <tr><th>Срок исполнения</th><td>{{ a.end_date.strftime('%d.%m.%Y') if a.end_date else 'Не установлен' }}</td></tr>
     <tr><th>Статус</th><td>{{ get_status_meta(a.status).label }}{% if a.status_comment %}. {{ a.status_comment }}{% endif %}</td></tr>
@@ -106,6 +110,11 @@
   <span class="badge {{ status_meta.class }}" {% if status_meta.style %}style="{{ status_meta.style }}"{% endif %}>{{ status_meta.label }}</span>
   {% set priority_meta = get_priority_meta(a.priority) %}
   | <strong>Приоритет:</strong> <span class="badge {{ priority_meta.class }}">{{ priority_meta.label }}</span>
+  {% set complexity_meta = get_complexity_meta(a.complexity_level) %}
+  {% set effort_hours = calculate_effort_hours(a) %}
+  | <strong>Сложность:</strong> <span class="badge {{ complexity_meta.class }}">{{ complexity_meta.label }}</span>
+  | <strong>Норма:</strong> {{ complexity_meta.daily_hours }} ч/день
+  | <strong>Трудозатраты:</strong> {% if effort_hours is not none %}{{ effort_hours }} ч{% else %}не рассчитаны{% endif %}
 </p>
 
 {% if current_user.role in ['admin', 'superadmin', 'deputy'] %}
@@ -121,6 +130,16 @@
     <span class="badge bg-secondary">Чужая задача</span>
   {% endif %}
 </p>
+
+{% if linked_plan %}
+<p class="task-meta-line"><strong>План:</strong> <a href="{{ url_for('plan_detail', plan_id=linked_plan.id) }}">{{ linked_plan.plan_text }}</a></p>
+{% elif plan_add_candidate %}
+<form method="post" action="{{ url_for('add_activity_to_plan', activity_id=a.id) }}" class="d-inline-block mb-2">
+  <button class="btn btn-outline-success">Добавить в план: {{ plan_add_candidate.plan_text }}</button>
+</form>
+{% elif a.plan_requested %}
+<p class="task-meta-line text-warning"><strong>План:</strong> ожидается создание плана за {{ a.start_date.strftime('%m.%Y') if a.start_date else 'месяц задачи' }}. Задача добавится автоматически.</p>
+{% endif %}
 
 {% if a.assigned_department %}
 <p class="task-meta-line"><strong>Отдел-адресат:</strong> {{ a.assigned_department.name }}</p>
@@ -286,6 +305,10 @@
         <small class="text-muted">Загружен:
           {{ d.uploaded_at.strftime('%d.%m.%Y %H:%M') if d.uploaded_at else '-' }}
         </small>
+        {% if d.ocr_status == 'queued' %}<div><span class="badge bg-secondary">В очереди распознавания</span></div>
+        {% elif d.ocr_status == 'processing' %}<div><span class="badge bg-info text-dark">Распознаётся</span></div>
+        {% elif d.ocr_status == 'failed' %}<div><span class="badge bg-danger">Ошибка распознавания</span>{% if d.ocr_error %}<small class="text-danger d-block">{{ d.ocr_error }}</small>{% endif %}</div>
+        {% elif d.ocr_status == 'completed' and not d.doc_rec %}<div><small class="text-muted">Текст не обнаружен</small></div>{% endif %}
       </div>
       {% if d.doc_rec %}
         <button class="btn btn-sm btn-outline-primary"
@@ -325,6 +348,10 @@
   </div>
 </div>
 {% endfor %}
+
+{% if has_pending_ocr %}
+<script>setTimeout(function () { window.location.reload(); }, 5000);</script>
+{% endif %}
 
 {% if can_modify_work %}
 <div class="modal fade" id="addExtraModal" tabindex="-1" aria-hidden="true">

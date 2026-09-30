@@ -416,6 +416,9 @@
       <li><a class="dropdown-item" href="{{ url_for('letters_page') }}">📨 Письма</a></li>
       <li><a class="dropdown-item" href="{{ url_for('memos_page') }}">📝 Служебные записки</a></li>
       <li><a class="dropdown-item" href="{{ url_for('plans_list') }}">📅 Планы и отчеты</a></li>
+      {% if current_user.role in ['admin', 'superadmin'] %}
+      <li><a class="dropdown-item" href="{{ url_for('protocols_page') }}">📋 Протоколы</a></li>
+      {% endif %}
       {% if current_user.role in ['admin', 'superadmin', 'deputy'] %}
       <li><a class="dropdown-item" href="{{ url_for('plans_review') }}">✅ Проверка планов</a></li>
       {% endif %}
@@ -460,6 +463,9 @@
     </a>
     <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="adminMenu">
       <li><a class="dropdown-item" href="{{ url_for('admin_users') }}">👥 Пользователи</a></li>
+      {% if current_user.role == 'superadmin' %}
+      <li><a class="dropdown-item" href="{{ url_for('admin_workshops') }}">🏭 Цехи</a></li>
+      {% endif %}
       <li><a class="dropdown-item" href="{{ url_for('admin_departments') }}">🏢 Отделы</a></li>
        <li><a class="dropdown-item" href="{{ url_for('admin_activity_types') }}">📂 Типы активностей</a></li>
       <li><a class="dropdown-item" href="{{ url_for('document_templates_page') }}">📑 Шаблоны задач и служебных</a></li>

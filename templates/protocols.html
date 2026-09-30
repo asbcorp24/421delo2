@@ -1,0 +1,54 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div>
+    <h3 class="mb-1">Протоколы</h3>
+    <div class="text-muted">Документы с перечнем задач, сроками и актуальными результатами исполнения.</div>
+  </div>
+</div>
+
+<div class="card bg-dark border-info mb-4">
+  <div class="card-body">
+    <h5 class="mb-3">Создать протокол</h5>
+    <form method="post" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Название</label>
+        <input class="form-control" name="title" placeholder="Например: Протокол оперативного совещания" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Дата протокола</label>
+        <input class="form-control" type="date" name="protocol_date" value="{{ today.isoformat() }}" required>
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        <button class="btn btn-success w-100">Создать</button>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Примечание</label>
+        <textarea class="form-control" name="description" rows="2" placeholder="Тема совещания, основание или другие сведения"></textarea>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card bg-dark border-info"><div class="table-responsive">
+  <table class="table table-dark table-hover align-middle mb-0">
+    <thead><tr><th>№</th><th>Дата</th><th>Название</th><th>Создал</th><th>Задач</th><th></th></tr></thead>
+    <tbody>
+      {% for protocol in protocols %}
+      <tr>
+        <td>{{ protocol.id }}</td>
+        <td class="text-nowrap">{{ protocol.protocol_date.strftime('%d.%m.%Y') }}</td>
+        <td><div class="fw-semibold">{{ protocol.title }}</div>{% if protocol.description %}<div class="small text-muted text-truncate" style="max-width: 520px;">{{ protocol.description }}</div>{% endif %}</td>
+        <td>{{ protocol.creator.full_name if protocol.creator else 'Суперадминистратор' }}</td>
+        <td><span class="badge bg-info text-dark">{{ protocol.items|length }}</span></td>
+        <td class="text-nowrap"><a class="btn btn-sm btn-outline-info" href="{{ url_for('protocol_detail', protocol_id=protocol.id) }}">Открыть</a>
+          <form method="post" action="{{ url_for('protocol_delete', protocol_id=protocol.id) }}" class="d-inline" onsubmit="return confirm('Удалить протокол и его состав?')"><button class="btn btn-sm btn-outline-danger">Удалить</button></form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted py-4">Протоколы пока не созданы.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div></div>
+{% endblock %}
