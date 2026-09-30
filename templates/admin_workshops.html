@@ -4,23 +4,24 @@
 <p class="text-muted">Сначала создайте цех, затем назначьте его отделам. Пользователь относится к цеху через свой отдел.</p>
 <form method="post" action="{{ url_for('add_workshop') }}" class="card p-3 mb-4 shadow-sm">
   <div class="row g-2 align-items-end">
-    <div class="col-md-9"><label class="form-label">Название цеха</label><input type="text" name="name" class="form-control" placeholder="Например: Цех №1" required></div>
+    <div class="col-md-5"><label class="form-label">Название цеха</label><input type="text" name="name" class="form-control" placeholder="Например: Цех №1" required></div>
+    <div class="col-md-4"><label class="form-label">Начальник цеха</label><select name="manager_id" class="form-select"><option value="">Не назначен</option>{% for manager in managers %}<option value="{{ manager.id }}">{{ manager.full_name }}</option>{% endfor %}</select></div>
     <div class="col-md-3"><button class="btn btn-success w-100">Добавить цех</button></div>
   </div>
 </form>
 <table class="table table-striped align-middle">
-  <thead><tr><th>ID</th><th>Название</th><th>Отделов</th><th>Действия</th></tr></thead>
+  <thead><tr><th>ID</th><th>Название</th><th>Начальник</th><th>Отделов</th><th>Действия</th></tr></thead>
   <tbody>
     {% for workshop in workshops %}
     <tr>
-      <td>{{ workshop.id }}</td><td>{{ workshop.name }}</td><td>{{ workshop.departments|length }}</td>
+      <td>{{ workshop.id }}</td><td>{{ workshop.name }}</td><td>{{ workshop.manager.full_name if workshop.manager else 'Не назначен' }}</td><td>{{ workshop.departments|length }}</td>
       <td class="d-flex gap-2">
-        <form method="post" action="{{ url_for('edit_workshop', workshop_id=workshop.id) }}" class="d-flex gap-2"><input type="text" name="name" class="form-control form-control-sm" value="{{ workshop.name }}" required><button class="btn btn-sm btn-outline-primary">Сохранить</button></form>
+        <form method="post" action="{{ url_for('edit_workshop', workshop_id=workshop.id) }}" class="d-flex gap-2"><input type="text" name="name" class="form-control form-control-sm" value="{{ workshop.name }}" required><select name="manager_id" class="form-select form-select-sm"><option value="">Не назначен</option>{% for manager in managers %}<option value="{{ manager.id }}" {% if workshop.manager_id == manager.id %}selected{% endif %}>{{ manager.full_name }}</option>{% endfor %}</select><button class="btn btn-sm btn-outline-primary">Сохранить</button></form>
         <form method="post" action="{{ url_for('delete_workshop', workshop_id=workshop.id) }}"><button class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить цех?')">Удалить</button></form>
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="4" class="text-muted text-center py-4">Цехи пока не добавлены.</td></tr>
+    <tr><td colspan="5" class="text-muted text-center py-4">Цехи пока не добавлены.</td></tr>
     {% endfor %}
   </tbody>
 </table>

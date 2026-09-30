@@ -75,6 +75,8 @@ class Workshop(db.Model):
     __tablename__ = "workshops"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), unique=True, nullable=False)
+    manager_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    manager = db.relationship("User", foreign_keys=[manager_id], backref="managed_workshops")
     created_at = db.Column(db.DateTime, default=dt.datetime.utcnow, nullable=False)
 
 

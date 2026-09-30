@@ -42,6 +42,7 @@ X-API-Key: YOUR_API_TOKEN
 | `GET` | `/api/crm/v1/health` | Проверка подключения |
 | `GET` | `/api/crm/v1/users` | Справочник пользователей |
 | `GET` | `/api/crm/v1/departments` | Справочник отделов и цехов |
+| `GET` | `/api/crm/v1/workshops` | Справочник цехов и их начальников |
 | `GET` | `/api/crm/v1/task-types` | Справочник типов задач |
 | `GET` | `/api/crm/v1/tasks` | Задачи |
 | `POST` | `/api/crm/v1/tasks` | Создать задачу |
@@ -84,6 +85,7 @@ X-API-Key: YOUR_API_TOKEN
 ```bash
 curl -H "Authorization: Bearer YOUR_API_TOKEN" "http://server:5001/api/crm/v1/users"
 curl -H "Authorization: Bearer YOUR_API_TOKEN" "http://server:5001/api/crm/v1/departments"
+curl -H "Authorization: Bearer YOUR_API_TOKEN" "http://server:5001/api/crm/v1/workshops"
 curl -H "Authorization: Bearer YOUR_API_TOKEN" "http://server:5001/api/crm/v1/task-types"
 ```
 

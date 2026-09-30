@@ -759,9 +759,13 @@ def ensure_runtime_schema():
             CREATE TABLE IF NOT EXISTS workshops (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name VARCHAR(200) NOT NULL UNIQUE,
+                manager_id INTEGER REFERENCES users(id),
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """))
+        workshop_cols = {row[1] for row in conn.execute(sql_text("PRAGMA table_info(workshops)")).fetchall()}
+        if "manager_id" not in workshop_cols:
+            conn.execute(sql_text("ALTER TABLE workshops ADD COLUMN manager_id INTEGER"))
         if department_cols:
             if "workshop_id" not in department_cols:
                 conn.execute(sql_text("ALTER TABLE departments ADD COLUMN workshop_id INTEGER"))
@@ -1407,6 +1411,29 @@ def crm_api_departments():
             "letter_number_series": department.letter_number_series,
             "memo_number_series": department.memo_number_series,
         } for department in rows],
+        "pagination": {"total": total, "limit": limit, "offset": offset},
+    })
+
+
+@app.get("/api/crm/v1/workshops")
+@crm_api_required
+def crm_api_workshops():
+    """Workshop directory with the appointed manager, if one is configured."""
+    limit, offset = crm_api_pagination()
+    if limit is None:
+        return jsonify({"error": "invalid_pagination"}), 400
+    query = Workshop.query.options(joinedload(Workshop.manager))
+    total = query.count()
+    rows = query.order_by(Workshop.name, Workshop.id).offset(offset).limit(limit).all()
+    return jsonify({
+        "data": [{
+            "id": workshop.id,
+            "name": workshop.name,
+            "manager": {
+                "id": workshop.manager.id,
+                "full_name": workshop.manager.full_name,
+            } if workshop.manager else None,
+        } for workshop in rows],
         "pagination": {"total": total, "limit": limit, "offset": offset},
     })
 
@@ -5235,20 +5262,37 @@ def can_manage_department(department):
 @app.get("/admin/workshops")
 @role_required("superadmin")
 def admin_workshops():
-    workshops = Workshop.query.order_by(Workshop.name).all()
-    return render_template("admin_workshops.html", title="Цехи", workshops=workshops)
+    workshops = Workshop.query.options(joinedload(Workshop.manager)).order_by(Workshop.name).all()
+    managers = User.query.filter_by(is_approved=True, is_enabled=True).order_by(User.full_name).all()
+    return render_template("admin_workshops.html", title="Цехи", workshops=workshops, managers=managers)
+
+
+def workshop_manager_from_request():
+    """Return an active confirmed user selected as a workshop manager."""
+    raw_manager_id = (request.form.get("manager_id") or "").strip()
+    if not raw_manager_id:
+        return None
+    if not raw_manager_id.isdigit():
+        return False
+    manager = db.session.get(User, int(raw_manager_id))
+    if not manager or not manager.is_approved or not manager.is_enabled:
+        return False
+    return manager
 
 
 @app.post("/admin/workshops")
 @role_required("superadmin")
 def add_workshop():
     name = (request.form.get("name") or "").strip()
+    manager = workshop_manager_from_request()
     if not name:
         flash("Название цеха не может быть пустым.", "warning")
+    elif manager is False:
+        flash("Выберите действующего подтверждённого пользователя в качестве начальника.", "warning")
     elif Workshop.query.filter_by(name=name).first():
         flash("Такой цех уже существует.", "warning")
     else:
-        db.session.add(Workshop(name=name))
+        db.session.add(Workshop(name=name, manager=manager))
         db.session.commit()
         flash("Цех «{}» добавлен.".format(name), "success")
     return redirect(url_for("admin_workshops"))
@@ -5259,12 +5303,16 @@ def add_workshop():
 def edit_workshop(workshop_id):
     workshop = Workshop.query.get_or_404(workshop_id)
     name = (request.form.get("name") or "").strip()
+    manager = workshop_manager_from_request()
     if not name:
         flash("Название цеха не может быть пустым.", "warning")
+    elif manager is False:
+        flash("Выберите действующего подтверждённого пользователя в качестве начальника.", "warning")
     elif Workshop.query.filter(Workshop.name == name, Workshop.id != workshop.id).first():
         flash("Такой цех уже существует.", "warning")
     else:
         workshop.name = name
+        workshop.manager = manager
         db.session.commit()
         flash("Название цеха изменено.", "success")
     return redirect(url_for("admin_workshops"))
@@ -6837,6 +6885,66 @@ def plans_monthly_report():
         get_plan_status_meta=plan_item_status_meta,
         deadline_options=PLAN_DEADLINES,
     )
+
+
+@app.get("/plans/monthly-report/export")
+@role_required("admin", "superadmin")
+def plans_monthly_report_export():
+    """Export the selected monthly plan report in an Excel-compatible CSV file."""
+    month_value = (request.args.get("month") or "").strip()
+    period = get_plan_period(month_value)
+    if not period:
+        flash("Выберите месяц для экспорта отчета.", "warning")
+        return redirect(url_for("plans_monthly_report"))
+    period_start, period_end = period
+    items = (
+        PlanItem.query.options(
+            joinedload(PlanItem.executor).joinedload(User.department),
+            joinedload(PlanItem.linked_activity),
+        )
+        .join(Plan)
+        .filter(Plan.start_date <= period_end, Plan.end_date >= period_start)
+        .order_by(User.full_name, PlanItem.position)
+        .all()
+    )
+
+    payload = io.StringIO(newline="")
+    writer = csv.writer(payload, delimiter=";")
+    writer.writerow(["СВОДНЫЙ ОТЧЕТ ПО ВЫПОЛНЕНИЮ ПЛАНОВ"])
+    writer.writerow(["Период", "{} - {}".format(period_start.strftime("%d.%m.%Y"), period_end.strftime("%d.%m.%Y"))])
+    writer.writerow([])
+    writer.writerow([
+        "Отдел", "Исполнитель", "№", "Мероприятие", "Связанная задача",
+        "Срок выполнения", "Плановые часы", "Результат", "Комментарий",
+    ])
+    for item in items:
+        deadline = (
+            "До {}".format(item.deadline_date.strftime("%d.%m.%Y"))
+            if item.deadline_kind == "date" and item.deadline_date
+            else PLAN_DEADLINES.get(item.deadline_kind, item.deadline_kind)
+        )
+        status = plan_item_status_meta(item.status)["label"]
+        department = item.executor.department.name if item.executor and item.executor.department else "Без отдела"
+        linked_task = "#{} {}".format(item.linked_activity.id, item.linked_activity.title) if item.linked_activity else ""
+        writer.writerow([
+            department,
+            item.executor.full_name if item.executor else "",
+            item.position,
+            item.task_text,
+            linked_task,
+            deadline,
+            item.planned_hours or 0,
+            status,
+            item.comment or "",
+        ])
+
+    filename = "otchet_po_planam_{}.csv".format(period_start.strftime("%Y-%m"))
+    response = app.response_class(
+        payload.getvalue().encode("utf-8-sig"),
+        mimetype="text/csv; charset=utf-8",
+    )
+    response.headers["Content-Disposition"] = "attachment; filename={}".format(filename)
+    return response
 
 
 @app.route("/my-plans")
