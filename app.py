@@ -1291,6 +1291,98 @@ def crm_api_plan_payload(plan):
     }
 
 
+def crm_api_plan_reporting_payload(month_value):
+    """Build the report and analytics payload from one selected calendar month."""
+    period = get_plan_period(month_value)
+    if not period:
+        return None
+    period_start, period_end = period
+    plans_count = Plan.query.filter(
+        Plan.start_date <= period_end,
+        Plan.end_date >= period_start,
+    ).count()
+    items = (
+        PlanItem.query.options(
+            joinedload(PlanItem.executor).joinedload(User.department),
+            joinedload(PlanItem.linked_activity),
+        )
+        .join(Plan)
+        .join(User, PlanItem.executor_id == User.id)
+        .filter(Plan.start_date <= period_end, Plan.end_date >= period_start)
+        .order_by(User.full_name, PlanItem.position)
+        .all()
+    )
+    department_rows, executor_rows = build_plan_department_rows(items)
+    totals = {status: sum(1 for item in items if item.status == status) for status in PLAN_ITEM_STATUSES}
+    total = len(items)
+    summary = {
+        "plans_count": plans_count,
+        "departments_count": len(department_rows),
+        "executors_count": len(executor_rows),
+        "items_total": total,
+        "planned_count": totals["planned"],
+        "done_count": totals["done"],
+        "not_done_count": totals["not_done"],
+        "cancelled_count": totals["cancelled"],
+        "completion_percent": round((totals["done"] / total) * 100, 1) if total else 0,
+        "planned_hours_total": round(sum(float(item.planned_hours or 0) for item in items), 2),
+        "done_hours_total": round(sum(float(item.planned_hours or 0) for item in items if item.status == "done"), 2),
+        "not_done_hours_total": round(sum(float(item.planned_hours or 0) for item in items if item.status == "not_done"), 2),
+    }
+
+    def aggregate(row):
+        return {
+            "total": row["total"], "planned": row["planned"], "done": row["done"],
+            "not_done": row["not_done"], "cancelled": row["cancelled"],
+            "completion_percent": row["completion"],
+            "planned_hours": round(row["planned_hours"], 2),
+            "done_hours": round(row["done_hours"], 2),
+            "not_done_hours": round(row["not_done_hours"], 2),
+        }
+
+    return {
+        "period": {
+            "month": period_start.strftime("%Y-%m"),
+            "start_date": period_start.isoformat(),
+            "end_date": period_end.isoformat(),
+        },
+        "summary": summary,
+        "departments": [
+            {"id": row["id"], "name": row["name"], **aggregate(row)}
+            for row in department_rows
+        ],
+        "executors": [
+            {
+                "id": row["user"].id if row["user"] else None,
+                "full_name": row["user"].full_name if row["user"] else "Без исполнителя",
+                "department": {
+                    "id": row["user"].department.id,
+                    "name": row["user"].department.name,
+                } if row["user"] and row["user"].department else None,
+                **aggregate(row),
+            }
+            for row in executor_rows
+        ],
+        "items": [{
+            "id": item.id,
+            "plan_id": item.plan_id,
+            "position": item.position,
+            "text": item.task_text,
+            "deadline_kind": item.deadline_kind,
+            "deadline_date": iso_or_none(item.deadline_date),
+            "planned_hours": item.planned_hours or 0,
+            "status": item.status,
+            "comment": item.comment,
+            "completed_at": iso_or_none(item.completed_at),
+            "executor": crm_api_user(item.executor),
+            "linked_task": {
+                "id": item.linked_activity.id,
+                "title": item.linked_activity.title,
+            } if item.linked_activity else None,
+        } for item in items],
+    }
+
+
 def crm_api_validate_plan_item(payload, plan, position, existing=None):
     """Apply validated external plan-line values and return an error message if invalid."""
     if not isinstance(payload, dict):
@@ -1723,14 +1815,36 @@ def crm_api_plans():
             "text": plan.plan_text, "approval_status": plan.approval_status,
             "created_at": iso_or_none(plan.created_at), "creator": crm_api_user(plan.creator),
             "items": [{
-                "id": item.id, "position": item.position, "text": item.task_text,
-                "deadline_kind": item.deadline_kind, "deadline_date": iso_or_none(item.deadline_date),
-                "status": item.status, "comment": item.comment,
+            "id": item.id, "position": item.position, "text": item.task_text,
+            "deadline_kind": item.deadline_kind, "deadline_date": iso_or_none(item.deadline_date),
+            "planned_hours": item.planned_hours or 0,
+            "status": item.status, "comment": item.comment,
                 "completed_at": iso_or_none(item.completed_at), "executor": crm_api_user(item.executor),
                 "linked_task": {"id": item.linked_activity.id, "title": item.linked_activity.title} if item.linked_activity else None,
             } for item in plan.items],
         })
     return jsonify({"data": data, "pagination": {"total": total, "limit": limit, "offset": offset}})
+
+
+@app.get("/api/crm/v1/plans/report")
+@crm_api_required
+def crm_api_plans_report():
+    """Monthly plan report with source lines and aggregates for an external CRM."""
+    payload = crm_api_plan_reporting_payload((request.args.get("month") or "").strip())
+    if payload is None:
+        return jsonify({"error": "invalid_month", "message": "Используйте month в формате YYYY-MM."}), 400
+    return jsonify({"data": payload})
+
+
+@app.get("/api/crm/v1/plans/analytics")
+@crm_api_required
+def crm_api_plans_analytics():
+    """Monthly aggregate plan metrics without the per-line report data."""
+    payload = crm_api_plan_reporting_payload((request.args.get("month") or "").strip())
+    if payload is None:
+        return jsonify({"error": "invalid_month", "message": "Используйте month в формате YYYY-MM."}), 400
+    payload.pop("items")
+    return jsonify({"data": payload})
 
 
 @app.post("/api/crm/v1/plans")
@@ -5869,7 +5983,7 @@ def build_plan_department_rows(items):
         department_id = department.id if department else 0
         department_name = department.name if department else "Без отдела"
         department_row = departments.setdefault(department_id, {
-            "name": department_name,
+            "id": department_id if department else None, "name": department_name,
             "total": 0, "planned": 0, "done": 0, "not_done": 0, "cancelled": 0,
             "planned_hours": 0, "done_hours": 0, "not_done_hours": 0,
             "executor_map": {},
