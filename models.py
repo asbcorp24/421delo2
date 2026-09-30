@@ -376,6 +376,7 @@ class PlanItem(db.Model):
     task_text = db.Column(db.Text, nullable=False)
     deadline_kind = db.Column(db.String(32), nullable=False, default="month")
     deadline_date = db.Column(db.Date)
+    planned_hours = db.Column(db.Float, nullable=False, default=0)
     status = db.Column(db.String(32), nullable=False, default="planned")
     comment = db.Column(db.Text)
     completed_at = db.Column(db.DateTime)

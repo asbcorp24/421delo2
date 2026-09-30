@@ -52,16 +52,17 @@
       {% if plan.revision_comment %}<div class="alert alert-danger py-2 mb-3"><b>Замечание:</b> {{ plan.revision_comment }}</div>{% endif %}
       <div class="table-responsive">
         <table class="table table-dark table-sm align-middle mb-3">
-          <thead><tr><th>№</th><th>Исполнитель</th><th>Мероприятие</th><th>Срок</th><th>Связанная задача</th><th>Результат</th></tr></thead>
+          <thead><tr><th>№</th><th>Исполнитель</th><th>Мероприятие</th><th>Срок</th><th>План, ч</th><th>Связанная задача</th><th>Результат</th></tr></thead>
           <tbody>{% for item in plan.items %}
             {% set meta = get_plan_status_meta(item.status) %}
             <tr>
               <td>{{ item.position }}</td><td>{{ item.executor.full_name if item.executor else '-' }}</td><td>{{ item.task_text }}</td>
               <td>{% if item.deadline_kind == 'date' and item.deadline_date %}До {{ item.deadline_date.strftime('%d.%m.%Y') }}{% else %}{{ deadline_options.get(item.deadline_kind, item.deadline_kind) }}{% endif %}</td>
+              <td>{{ item.planned_hours or 0 }}</td>
               <td>{% if item.linked_activity %}<a href="{{ url_for('activity_view', activity_id=item.linked_activity.id) }}">#{{ item.linked_activity.id }} {{ item.linked_activity.title }}</a>{% else %}-{% endif %}</td>
               <td><span class="badge {{ meta.class }}">{{ meta.label }}</span></td>
             </tr>
-          {% else %}<tr><td colspan="6" class="text-center text-muted py-3">В плане нет пунктов.</td></tr>{% endfor %}</tbody>
+          {% else %}<tr><td colspan="7" class="text-center text-muted py-3">В плане нет пунктов.</td></tr>{% endfor %}</tbody>
         </table>
       </div>
       <div class="d-flex flex-wrap gap-2">

@@ -40,6 +40,9 @@ X-API-Key: YOUR_API_TOKEN
 | Метод | Адрес | Назначение |
 | --- | --- | --- |
 | `GET` | `/api/crm/v1/health` | Проверка подключения |
+| `GET` | `/api/crm/v1/users` | Справочник пользователей |
+| `GET` | `/api/crm/v1/departments` | Справочник отделов и цехов |
+| `GET` | `/api/crm/v1/task-types` | Справочник типов задач |
 | `GET` | `/api/crm/v1/tasks` | Задачи |
 | `POST` | `/api/crm/v1/tasks` | Создать задачу |
 | `PATCH` | `/api/crm/v1/tasks/<id>` | Изменить задачу |
@@ -72,6 +75,21 @@ X-API-Key: YOUR_API_TOKEN
 | --- | --- |
 | `date_from` | `YYYY-MM-DD` |
 | `date_to` | `YYYY-MM-DD` |
+
+### Справочники для сопоставления
+
+Перед созданием задач внешняя CRM может получить актуальные идентификаторы исполнителей,
+отделов и типов задач:
+
+```bash
+curl -H "Authorization: Bearer YOUR_API_TOKEN" "http://server:5001/api/crm/v1/users"
+curl -H "Authorization: Bearer YOUR_API_TOKEN" "http://server:5001/api/crm/v1/departments"
+curl -H "Authorization: Bearer YOUR_API_TOKEN" "http://server:5001/api/crm/v1/task-types"
+```
+
+`/users` по умолчанию возвращает только подтверждённые активные учётные записи.
+Для сверки архивных данных добавьте `?include_inactive=true`: ответ также содержит отключённые
+и неподтверждённые записи с признаками `is_enabled` и `is_approved`.
 
 ### Задачи
 
@@ -137,13 +155,13 @@ curl -H "X-API-Key: YOUR_API_TOKEN" \
   "http://server:5001/api/crm/v1/plans?date_from=2026-09-01&date_to=2026-09-30"
 ```
 
-Каждый план содержит период, текст, статус утверждения, автора и массив `items`. Строка плана содержит исполнителя, срок (`deadline_kind`, `deadline_date`), статус выполнения, комментарий и дату выполнения.
+Каждый план содержит период, текст, статус утверждения, автора и массив `items`. Строка плана содержит исполнителя, срок (`deadline_kind`, `deadline_date`), планируемое количество часов (`planned_hours`), статус выполнения, комментарий и дату выполнения.
 
 ### Запись планов
 
 При создании плана обязательны `text`, `start_date`, `end_date` и непустой массив `items`.
-У каждого пункта обязательны `text` и `executor_id`; для `deadline_kind: "date"` также требуется
-`deadline_date`. Допустимые сроки: `month`, `q1`, `q2`, `q3`, `q4`, `date`.
+У каждого пункта обязательны `text`, `executor_id` и `planned_hours`; для `deadline_kind: "date"` также требуется
+`deadline_date`. Плановые часы могут быть дробными, например `1.5`. Допустимые сроки: `month`, `q1`, `q2`, `q3`, `q4`, `date`.
 
 ```bash
 curl -X POST "http://server:5001/api/crm/v1/plans" \
@@ -157,6 +175,7 @@ curl -X POST "http://server:5001/api/crm/v1/plans" \
     "items": [{
       "text": "Подготовить ежемесячный отчет",
       "executor_id": 12,
+      "planned_hours": 8,
       "deadline_kind": "date",
       "deadline_date": "2026-10-25"
     }]

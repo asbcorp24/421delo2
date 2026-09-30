@@ -942,6 +942,7 @@ def ensure_runtime_schema():
                 position INTEGER NOT NULL DEFAULT 1,
                 task_text TEXT NOT NULL,
                 deadline_kind VARCHAR(32) NOT NULL DEFAULT 'month',
+                planned_hours REAL NOT NULL DEFAULT 0,
                 status VARCHAR(32) NOT NULL DEFAULT 'planned'
                     CHECK (status IN ('planned', 'done', 'not_done', 'cancelled')),
                 comment TEXT,
@@ -965,6 +966,8 @@ def ensure_runtime_schema():
             conn.execute(sql_text("ALTER TABLE plan_items ADD COLUMN deadline_date DATE"))
         if "linked_activity_id" not in plan_item_cols:
             conn.execute(sql_text("ALTER TABLE plan_items ADD COLUMN linked_activity_id INTEGER REFERENCES activities(id)"))
+        if "planned_hours" not in plan_item_cols:
+            conn.execute(sql_text("ALTER TABLE plan_items ADD COLUMN planned_hours REAL NOT NULL DEFAULT 0"))
 
         activity_cols = {row[1] for row in conn.execute(sql_text("PRAGMA table_info(activities)")).fetchall()}
         if "priority" not in activity_cols:
@@ -1271,6 +1274,7 @@ def crm_api_plan_payload(plan):
             "text": item.task_text,
             "deadline_kind": item.deadline_kind,
             "deadline_date": iso_or_none(item.deadline_date),
+            "planned_hours": item.planned_hours or 0,
             "status": item.status,
             "comment": item.comment,
             "completed_at": iso_or_none(item.completed_at),
@@ -1305,6 +1309,10 @@ def crm_api_validate_plan_item(payload, plan, position, existing=None):
     if deadline_date is False or (deadline_kind == "date" and not deadline_date):
         return "Для срока date укажите deadline_date в формате YYYY-MM-DD."
 
+    planned_hours = parse_plan_hours(payload.get("planned_hours", existing.planned_hours if existing else None))
+    if planned_hours is None:
+        return "Укажите planned_hours: положительное число часов (допустимы дробные значения)."
+
     status = payload.get("status", existing.status if existing else "planned")
     if status not in PLAN_ITEM_STATUSES:
         return "Некорректный статус пункта плана."
@@ -1321,6 +1329,7 @@ def crm_api_validate_plan_item(payload, plan, position, existing=None):
     item.executor_id = executor.id
     item.deadline_kind = deadline_kind
     item.deadline_date = deadline_date
+    item.planned_hours = planned_hours
     item.status = status
     if "comment" in payload:
         comment = crm_api_optional_text(payload["comment"])
@@ -1339,6 +1348,83 @@ def crm_api_validate_plan_item(payload, plan, position, existing=None):
 @crm_api_required
 def crm_api_health():
     return jsonify({"status": "ok", "api_version": "v1", "server_time": dt.datetime.utcnow().isoformat() + "Z"})
+
+
+@app.get("/api/crm/v1/users")
+@crm_api_required
+def crm_api_users():
+    """Directory for reliable CRM-to-document-workflow employee mapping."""
+    limit, offset = crm_api_pagination()
+    if limit is None:
+        return jsonify({"error": "invalid_pagination"}), 400
+    include_inactive = (request.args.get("include_inactive") or "").lower() in {"1", "true", "yes"}
+    query = User.query.options(joinedload(User.department).joinedload(Department.workshop))
+    if not include_inactive:
+        query = query.filter(User.is_approved.is_(True), User.is_enabled.is_(True))
+    total = query.count()
+    rows = query.order_by(User.full_name, User.id).offset(offset).limit(limit).all()
+    return jsonify({
+        "data": [{
+            "id": user.id,
+            "full_name": user.full_name,
+            "username": user.username,
+            "role": user.role,
+            "is_approved": bool(user.is_approved),
+            "is_enabled": bool(user.is_enabled),
+            "department": {
+                "id": user.department.id,
+                "name": user.department.name,
+                "workshop": {
+                    "id": user.department.workshop.id,
+                    "name": user.department.workshop.name,
+                } if user.department.workshop else None,
+            } if user.department else None,
+        } for user in rows],
+        "pagination": {"total": total, "limit": limit, "offset": offset},
+    })
+
+
+@app.get("/api/crm/v1/departments")
+@crm_api_required
+def crm_api_departments():
+    """Department directory, including numbering settings used by document registers."""
+    limit, offset = crm_api_pagination()
+    if limit is None:
+        return jsonify({"error": "invalid_pagination"}), 400
+    query = Department.query.options(joinedload(Department.workshop))
+    total = query.count()
+    rows = query.order_by(Department.name, Department.id).offset(offset).limit(limit).all()
+    return jsonify({
+        "data": [{
+            "id": department.id,
+            "name": department.name,
+            "workshop": {
+                "id": department.workshop.id,
+                "name": department.workshop.name,
+            } if department.workshop else None,
+            "letter_prefix": department.letter_prefix,
+            "memo_prefix": department.memo_prefix,
+            "letter_number_series": department.letter_number_series,
+            "memo_number_series": department.memo_number_series,
+        } for department in rows],
+        "pagination": {"total": total, "limit": limit, "offset": offset},
+    })
+
+
+@app.get("/api/crm/v1/task-types")
+@crm_api_required
+def crm_api_task_types():
+    """Task-type directory used by POST /tasks type_id validation."""
+    limit, offset = crm_api_pagination()
+    if limit is None:
+        return jsonify({"error": "invalid_pagination"}), 400
+    query = ActivityType.query
+    total = query.count()
+    rows = query.order_by(ActivityType.name, ActivityType.id).offset(offset).limit(limit).all()
+    return jsonify({
+        "data": [{"id": activity_type.id, "name": activity_type.name} for activity_type in rows],
+        "pagination": {"total": total, "limit": limit, "offset": offset},
+    })
 
 
 @app.get("/api/crm/v1/tasks")
@@ -1470,6 +1556,7 @@ def crm_api_create_task():
             task_text=activity.title,
             deadline_kind="date" if activity.end_date else "month",
             deadline_date=activity.end_date.date() if activity.end_date else None,
+            planned_hours=calculate_activity_effort_hours(activity) or 0,
             linked_activity_id=activity.id,
             status="planned",
         ))
@@ -2227,6 +2314,7 @@ def create_activity():
                     task_text=title,
                     deadline_kind="date" if end_date else "month",
                     deadline_date=task_end.date() if end_date else None,
+                    planned_hours=calculate_activity_effort_hours(a) or 0,
                     linked_activity_id=a.id,
                 ))
                 a.plan_requested = False
@@ -2952,6 +3040,7 @@ def add_activity_to_plan(activity_id):
         task_text=activity.title,
         deadline_kind="date" if deadline_date else "month",
         deadline_date=deadline_date,
+        planned_hours=calculate_activity_effort_hours(activity) or 0,
         linked_activity_id=activity.id,
         status="planned",
     ))
@@ -5713,6 +5802,15 @@ def parse_plan_deadline_date(deadline_kind, raw_date):
         return None
 
 
+def parse_plan_hours(raw_hours):
+    """Normalize the planned workload while allowing a comma decimal separator."""
+    try:
+        hours = float(str(raw_hours).strip().replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+    return round(hours, 2) if 0 < hours <= 10000 else None
+
+
 def build_plan_department_rows(items):
     """Return one consistent aggregation for department and employee reports."""
     departments = {}
@@ -5725,16 +5823,24 @@ def build_plan_department_rows(items):
         department_row = departments.setdefault(department_id, {
             "name": department_name,
             "total": 0, "planned": 0, "done": 0, "not_done": 0, "cancelled": 0,
+            "planned_hours": 0, "done_hours": 0, "not_done_hours": 0,
             "executor_map": {},
         })
         employee_row = department_row["executor_map"].setdefault(item.executor_id, {
             "user": user,
             "items": [],
             "total": 0, "planned": 0, "done": 0, "not_done": 0, "cancelled": 0,
+            "planned_hours": 0, "done_hours": 0, "not_done_hours": 0,
         })
+        planned_hours = float(item.planned_hours or 0)
         for row in (department_row, employee_row):
             row["total"] += 1
             row[item.status] = row.get(item.status, 0) + 1
+            row["planned_hours"] += planned_hours
+            if item.status == "done":
+                row["done_hours"] += planned_hours
+            elif item.status == "not_done":
+                row["not_done_hours"] += planned_hours
         employee_row["items"].append(item)
         employees[item.executor_id] = employee_row
 
@@ -5874,6 +5980,7 @@ def plans_list():
         item_counts = {status: 0 for status in PLAN_ITEM_STATUSES}
         for item in plan.items:
             item_counts[item.status] = item_counts.get(item.status, 0) + 1
+        item_counts["planned_hours"] = round(sum(float(item.planned_hours or 0) for item in plan.items), 2)
         plan_summary[plan.id] = item_counts
     return render_template(
         "plans.html", title="Планы", plans=plans, date_from=start_str, date_to=end_str,
@@ -5996,6 +6103,7 @@ def add_pending_activities_to_plan(plan):
             task_text=activity.title,
             deadline_kind="date" if deadline_date else "month",
             deadline_date=deadline_date,
+            planned_hours=calculate_activity_effort_hours(activity) or 0,
             linked_activity_id=activity.id,
             status="planned",
         ))
@@ -6028,6 +6136,7 @@ def plan_create():
         tasks = request.form.getlist("task_text")
         deadlines = request.form.getlist("deadline_kind")
         deadline_dates = request.form.getlist("deadline_date")
+        planned_hours_values = request.form.getlist("planned_hours")
 
         rows = []
         for index, task in enumerate(tasks):
@@ -6039,17 +6148,18 @@ def plan_create():
             )
             if not task and not executor_id:
                 continue
-            if not task or not executor_id or deadline not in PLAN_DEADLINES or (deadline == "date" and not deadline_date):
-                flash("В каждой строке укажите исполнителя, мероприятие и срок.", "warning")
+            planned_hours = parse_plan_hours(planned_hours_values[index] if index < len(planned_hours_values) else "")
+            if not task or not executor_id or deadline not in PLAN_DEADLINES or (deadline == "date" and not deadline_date) or planned_hours is None:
+                flash("В каждой строке укажите исполнителя, мероприятие, срок и плановые часы.", "warning")
                 return redirect(url_for("plan_create"))
-            rows.append((int(executor_id), task, deadline, deadline_date))
+            rows.append((int(executor_id), task, deadline, deadline_date, planned_hours))
 
         if not rows:
             flash("Добавьте хотя бы один пункт плана.", "warning")
             return redirect(url_for("plan_create"))
 
         is_manager = current_user.role in ("admin", "superadmin")
-        if not is_manager and any(executor_id != current_user.id for executor_id, _, _, _ in rows):
+        if not is_manager and any(executor_id != current_user.id for executor_id, _, _, _, _ in rows):
             abort(403)
         p = Plan(
             start_date=start_date,
@@ -6062,10 +6172,11 @@ def plan_create():
         )
         db.session.add(p)
         db.session.flush()
-        for position, (executor_id, task, deadline, deadline_date) in enumerate(rows, start=1):
+        for position, (executor_id, task, deadline, deadline_date, planned_hours) in enumerate(rows, start=1):
             db.session.add(PlanItem(
                 plan_id=p.id, executor_id=executor_id, position=position,
-                task_text=task, deadline_kind=deadline, deadline_date=deadline_date, status="planned",
+                task_text=task, deadline_kind=deadline, deadline_date=deadline_date,
+                planned_hours=planned_hours, status="planned",
             ))
         db.session.flush()
         auto_added = add_pending_activities_to_plan(p)
@@ -6124,8 +6235,9 @@ def plan_item_create(plan_id):
     executor_id = request.form.get("executor_id", type=int)
     deadline_kind = request.form.get("deadline_kind", "month")
     deadline_date = parse_plan_deadline_date(deadline_kind, request.form.get("deadline_date"))
-    if not task_text or not executor_id or deadline_kind not in PLAN_DEADLINES or (deadline_kind == "date" and not deadline_date):
-        flash("Заполните исполнителя, мероприятие и срок.", "warning")
+    planned_hours = parse_plan_hours(request.form.get("planned_hours"))
+    if not task_text or not executor_id or deadline_kind not in PLAN_DEADLINES or (deadline_kind == "date" and not deadline_date) or planned_hours is None:
+        flash("Заполните исполнителя, мероприятие, срок и плановые часы.", "warning")
         return redirect(url_for("plan_detail", plan_id=plan.id))
     if not is_manager and executor_id != current_user.id:
         abort(403)
@@ -6133,6 +6245,7 @@ def plan_item_create(plan_id):
     db.session.add(PlanItem(
         plan_id=plan.id, executor_id=executor_id, position=position,
         task_text=task_text, deadline_kind=deadline_kind, deadline_date=deadline_date,
+        planned_hours=planned_hours,
     ))
     db.session.commit()
     flash("Пункт плана добавлен", "success")
@@ -6180,6 +6293,11 @@ def plan_item_update(item_id):
                 return redirect(url_for("plan_detail", plan_id=item.plan_id))
             item.deadline_kind = deadline_kind
             item.deadline_date = deadline_date
+        planned_hours = parse_plan_hours(request.form.get("planned_hours"))
+        if planned_hours is None:
+            flash("Укажите положительное количество плановых часов.", "warning")
+            return redirect(url_for("plan_detail", plan_id=item.plan_id))
+        item.planned_hours = planned_hours
         executor_id = request.form.get("executor_id", type=int)
         if executor_id and is_manager:
             item.executor_id = executor_id
@@ -6652,6 +6770,9 @@ def plans_statistics():
         "not_done": totals["not_done"],
         "cancelled": totals["cancelled"],
         "completion": round((totals["done"] / total) * 100, 1) if total else 0,
+        "planned_hours": round(sum(float(item.planned_hours or 0) for item in items), 2),
+        "done_hours": round(sum(float(item.planned_hours or 0) for item in items if item.status == "done"), 2),
+        "not_done_hours": round(sum(float(item.planned_hours or 0) for item in items if item.status == "not_done"), 2),
     }
     chart_data = {
         "status_labels": ["Выполнено", "Невыполнено", "Отменено", "Запланировано"],
@@ -6664,6 +6785,8 @@ def plans_statistics():
         "department_done": [row["done"] for row in department_rows],
         "department_not_done": [row["not_done"] for row in department_rows],
         "department_planned": [row["planned"] for row in department_rows],
+        "department_hours": [round(row["planned_hours"], 2) for row in department_rows],
+        "department_done_hours": [round(row["done_hours"], 2) for row in department_rows],
     }
     return render_template(
         "plans_statistics.html", title="Аналитика выполнения планов",
@@ -6698,6 +6821,9 @@ def plans_monthly_report():
         "planned_count": counts["planned"], "done_count": counts["done"],
         "not_done_count": counts["not_done"], "cancelled_count": counts["cancelled"],
         "completion_percent": round((counts["done"] / len(items)) * 100, 1) if items else 0,
+        "planned_hours_total": round(sum(float(item.planned_hours or 0) for item in items), 2),
+        "done_hours_total": round(sum(float(item.planned_hours or 0) for item in items if item.status == "done"), 2),
+        "not_done_hours_total": round(sum(float(item.planned_hours or 0) for item in items if item.status == "not_done"), 2),
     }
 
     return render_template(
