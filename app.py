@@ -1757,6 +1757,72 @@ def crm_api_tasks():
     return jsonify({"data": data, "pagination": {"total": total, "limit": limit, "offset": offset}})
 
 
+@app.get("/api/crm/v1/tasks/summaries")
+@crm_api_required
+def crm_api_task_summaries():
+    raw_ids = (request.args.get("ids") or "").strip()
+    if not raw_ids:
+        return jsonify({"data": []})
+
+    ids = []
+    for part in raw_ids.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            value = int(part)
+        except (TypeError, ValueError):
+            return jsonify({"error": "validation_error", "message": "ids должен содержать целые ID через запятую."}), 400
+        if value > 0:
+            ids.append(value)
+
+    ids = list(dict.fromkeys(ids))[:500]
+    if not ids:
+        return jsonify({"data": []})
+
+    activities = Activity.query.options(
+        joinedload(Activity.owner).joinedload(User.department),
+        joinedload(Activity.assigned_department),
+        joinedload(Activity.type),
+    ).filter(Activity.id.in_(ids)).all()
+
+    latest_logs = {}
+    rows = ActivityLog.query.filter(ActivityLog.activity_id.in_(ids)).order_by(
+        ActivityLog.activity_id.asc(),
+        ActivityLog.entry_date.desc(),
+        ActivityLog.id.desc(),
+    ).all()
+    for row in rows:
+        latest_logs.setdefault(row.activity_id, row)
+
+    data = []
+    for activity in activities:
+        log = latest_logs.get(activity.id)
+        data.append({
+            "id": activity.id,
+            "status": activity.status,
+            "status_label": getattr(activity, "status_label", None),
+            "owner": crm_api_user(activity.owner),
+            "assigned_department": crm_api_department(activity.assigned_department),
+            "start_date": iso_or_none(activity.start_date),
+            "end_date": iso_or_none(activity.end_date),
+            "postponed_to": iso_or_none(activity.postponed_to),
+            "decision": activity.decision,
+            "status_comment": activity.status_comment,
+            "approve_comment": activity.approve_comment,
+            "updated_at": iso_or_none(activity.updated_at),
+            "latest_log": {
+                "id": log.id,
+                "text": log.text,
+                "entry_date": iso_or_none(log.entry_date),
+                "is_done": bool(log.is_done),
+                "parent_id": log.parent_id,
+            } if log else None,
+        })
+
+    return jsonify({"data": data})
+
+
 @app.get("/api/crm/v1/tasks/<int:activity_id>")
 @crm_api_required
 def crm_api_task_detail(activity_id):
