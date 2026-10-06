@@ -180,8 +180,8 @@ curl -H "Authorization: Bearer YOUR_API_TOKEN" \
 ### Запись планов
 
 При создании плана обязательны `text`, `start_date`, `end_date` и непустой массив `items`.
-У каждого пункта обязательны `text`, `executor_id` и `planned_hours`; для `deadline_kind: "date"` также требуется
-`deadline_date`. Плановые часы могут быть дробными, например `1.5`. Допустимые сроки: `month`, `q1`, `q2`, `q3`, `q4`, `date`.
+У каждого пункта обязательны `text` и `executor_id`; для `deadline_kind: "date"` также требуется
+`deadline_date`. `planned_hours` необязателен: пустое значение сохраняется как `0`; часы могут быть дробными, например `1.5`. Допустимые сроки: `month`, `q1`, `q2`, `q3`, `q4`, `date`.
 
 ```bash
 curl -X POST "http://server:5001/api/crm/v1/plans" \

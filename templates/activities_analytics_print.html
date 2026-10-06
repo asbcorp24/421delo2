@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Аналитика задач</title>
+  <style>
+    @page { size: A4 landscape; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #111; background: #fff; font: 9pt/1.3 Arial, sans-serif; }
+    h1 { margin: 0 0 3mm; font-size: 18pt; text-align: center; }
+    h2 { margin: 5mm 0 2mm; font-size: 11pt; }
+    .meta { margin-bottom: 4mm; text-align: center; color: #333; }
+    .toolbar { margin-bottom: 5mm; text-align: center; }
+    .button { padding: 6px 12px; border: 1px solid #333; background: #fff; color: #111; cursor: pointer; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; margin-bottom: 4mm; }
+    .metric { min-height: 16mm; padding: 2.5mm; border: 1px solid #777; }
+    .metric b { display: block; margin-top: 1mm; font-size: 14pt; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { padding: 1.5mm; border: 0.25mm solid #555; vertical-align: top; word-wrap: break-word; }
+    th { background: #e8e8e8; font-weight: 700; text-align: center; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; }
+    .num { text-align: center; white-space: nowrap; }
+    .muted { color: #555; }
+    .footer { margin-top: 6mm; font-size: 8pt; color: #555; }
+    @media print {
+      .toolbar { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar"><button class="button" type="button" onclick="window.print()">Печать</button></div>
+  <h1>АНАЛИТИКА ВЫПОЛНЕНИЯ ЗАДАЧ</h1>
+  <div class="meta">
+    Период: {{ date_from }} - {{ date_to }}
+    {% if selected_department_id %}; отдел: выбранный{% endif %}
+    {% if selected_owner_id %}; сотрудник: выбранный{% endif %}
+  </div>
+
+  <section class="summary">
+    <div class="metric">Всего задач<b>{{ summary.total }}</b></div>
+    <div class="metric">Выполнено<b>{{ summary.done }}</b></div>
+    <div class="metric">Не выполнено<b>{{ summary.not_done }}</b></div>
+    <div class="metric">В работе<b>{{ summary.in_progress }}</b></div>
+    <div class="metric">Перенос / отмена<b>{{ summary.postponed + summary.cancelled }}</b></div>
+    <div class="metric">Выполнение<b>{{ summary.completion }}%</b></div>
+    <div class="metric">По сложности<b>{{ summary.complexity_completion }}%</b></div>
+    <div class="metric">Качество<b>{{ summary.quality }}%</b></div>
+  </section>
+  <p class="muted">Качество: среднее между процентом выполнения по количеству задач и с учётом сложности. Отменённые задачи в расчёт не входят. Оценочная нагрузка: {{ summary.workload_hours }} ч.</p>
+
+  <h2>Сводка по отделам</h2>
+  <table>
+    <thead><tr><th style="width:20%">Отдел</th><th>Всего</th><th>Выполнено</th><th>Не выполнено</th><th>В работе</th><th>Перенос</th><th>Отменено</th><th>Выполнение</th><th>Сложность</th><th>Качество</th><th>Нагрузка</th></tr></thead>
+    <tbody>
+      {% for row in department_rows %}
+      <tr><td>{{ row.name }}</td><td class="num">{{ row.total }}</td><td class="num">{{ row.done }}</td><td class="num">{{ row.not_done }}</td><td class="num">{{ row.in_progress }}</td><td class="num">{{ row.postponed }}</td><td class="num">{{ row.cancelled }}</td><td class="num">{{ row.completion }}%</td><td class="num">{{ row.complexity_done }} / {{ row.complexity_total }}<br>{{ row.complexity_completion }}%</td><td class="num">{{ row.quality }}%</td><td class="num">{{ row.workload_hours }} ч</td></tr>
+      {% else %}<tr><td colspan="11" class="num">Задач за выбранный период нет.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Сводка по сотрудникам</h2>
+  <table>
+    <thead><tr><th style="width:18%">Сотрудник</th><th style="width:14%">Отдел</th><th>Всего</th><th>Выполнено</th><th>Не выполнено</th><th>В работе</th><th>Перенос</th><th>Отменено</th><th>Выполнение</th><th>Сложность</th><th>Качество</th><th>Нагрузка</th></tr></thead>
+    <tbody>
+      {% for row in user_rows %}
+      <tr><td>{{ row.name }}</td><td>{{ row.department }}</td><td class="num">{{ row.total }}</td><td class="num">{{ row.done }}</td><td class="num">{{ row.not_done }}</td><td class="num">{{ row.in_progress }}</td><td class="num">{{ row.postponed }}</td><td class="num">{{ row.cancelled }}</td><td class="num">{{ row.completion }}%</td><td class="num">{{ row.complexity_done }} / {{ row.complexity_total }}<br>{{ row.complexity_completion }}%</td><td class="num">{{ row.quality }}%</td><td class="num">{{ row.workload_hours }} ч</td></tr>
+      {% else %}<tr><td colspan="12" class="num">Данных нет.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+
+  {% if extra_rows %}
+  <h2>Дополнительные значения задач</h2>
+  <table>
+    <thead><tr><th>Показатель</th><th>Тип</th><th>Задач</th><th>Заполнений</th><th>Сумма / среднее</th><th>Да / Нет</th></tr></thead>
+    <tbody>{% for row in extra_rows %}<tr><td>{{ row.name }}</td><td>{{ row.type }}</td><td class="num">{{ row.tasks_count }}</td><td class="num">{{ row.filled }}</td><td class="num">{% if row.numeric_count %}{{ row.numeric_sum }} / {{ row.numeric_average }}{% else %}-{% endif %}</td><td class="num">{% if row.type == 'bool' %}{{ row.true_count }} / {{ row.false_count }}{% else %}-{% endif %}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+  <div class="footer">Сформировано в системе «Документооборот».</div>
+</body>
+</html>

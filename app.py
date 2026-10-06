@@ -686,9 +686,17 @@ def ensure_runtime_schema():
                 title VARCHAR(180) NOT NULL,
                 message TEXT NOT NULL,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                scheduled_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                background_color VARCHAR(16) NOT NULL DEFAULT '#0d6efd',
                 read_at DATETIME
             )
         """))
+        notification_cols = {row[1] for row in conn.execute(sql_text("PRAGMA table_info(user_notifications)")).fetchall()}
+        if "scheduled_at" not in notification_cols:
+            conn.execute(sql_text("ALTER TABLE user_notifications ADD COLUMN scheduled_at DATETIME"))
+            conn.execute(sql_text("UPDATE user_notifications SET scheduled_at = created_at WHERE scheduled_at IS NULL"))
+        if "background_color" not in notification_cols:
+            conn.execute(sql_text("ALTER TABLE user_notifications ADD COLUMN background_color VARCHAR(16) NOT NULL DEFAULT '#0d6efd'"))
         conn.execute(sql_text("""
             CREATE INDEX IF NOT EXISTS ix_user_notifications_user_read
             ON user_notifications (user_id, read_at, created_at)
@@ -829,6 +837,57 @@ def ensure_runtime_schema():
             CREATE INDEX IF NOT EXISTS ix_protocol_items_protocol_position
             ON protocol_items (protocol_id, position)
         """))
+        conn.execute(sql_text("""
+            CREATE TABLE IF NOT EXISTS schedule_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                schedule_date DATE NOT NULL,
+                text TEXT NOT NULL,
+                responsible_id INTEGER NOT NULL REFERENCES users(id),
+                status VARCHAR(32) NOT NULL DEFAULT 'planned',
+                completion_comment TEXT,
+                completed_at DATETIME,
+                activity_id INTEGER REFERENCES activities(id),
+                memo_id INTEGER REFERENCES letters(id),
+                created_by_id INTEGER REFERENCES users(id),
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(sql_text("""
+            CREATE INDEX IF NOT EXISTS ix_schedule_entries_date_responsible
+            ON schedule_entries (schedule_date, responsible_id)
+        """))
+        conn.execute(sql_text("""
+            CREATE TABLE IF NOT EXISTS schedules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title VARCHAR(255) NOT NULL,
+                schedule_date DATE NOT NULL,
+                description TEXT,
+                created_by_id INTEGER REFERENCES users(id),
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(sql_text("""
+            CREATE TABLE IF NOT EXISTS schedule_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                schedule_id INTEGER NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL DEFAULT 1,
+                item_date DATE NOT NULL,
+                text TEXT NOT NULL,
+                responsible_id INTEGER NOT NULL REFERENCES users(id),
+                status VARCHAR(32) NOT NULL DEFAULT 'planned',
+                completion_comment TEXT,
+                completed_at DATETIME,
+                activity_id INTEGER REFERENCES activities(id),
+                memo_id INTEGER REFERENCES letters(id),
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(sql_text("""
+            CREATE INDEX IF NOT EXISTS ix_schedule_items_schedule_position
+            ON schedule_items (schedule_id, position)
+        """))
         document_cols = {row[1] for row in conn.execute(sql_text("PRAGMA table_info(activity_documents)")).fetchall()}
         if "uploaded_by_id" not in document_cols:
             conn.execute(sql_text("ALTER TABLE activity_documents ADD COLUMN uploaded_by_id INTEGER"))
@@ -945,6 +1004,7 @@ def ensure_runtime_schema():
                 executor_id INTEGER NOT NULL REFERENCES users(id),
                 position INTEGER NOT NULL DEFAULT 1,
                 task_text TEXT NOT NULL,
+                justification TEXT,
                 deadline_kind VARCHAR(32) NOT NULL DEFAULT 'month',
                 planned_hours REAL NOT NULL DEFAULT 0,
                 status VARCHAR(32) NOT NULL DEFAULT 'planned'
@@ -972,6 +1032,8 @@ def ensure_runtime_schema():
             conn.execute(sql_text("ALTER TABLE plan_items ADD COLUMN linked_activity_id INTEGER REFERENCES activities(id)"))
         if "planned_hours" not in plan_item_cols:
             conn.execute(sql_text("ALTER TABLE plan_items ADD COLUMN planned_hours REAL NOT NULL DEFAULT 0"))
+        if "justification" not in plan_item_cols:
+            conn.execute(sql_text("ALTER TABLE plan_items ADD COLUMN justification TEXT"))
 
         activity_cols = {row[1] for row in conn.execute(sql_text("PRAGMA table_info(activities)")).fetchall()}
         if "priority" not in activity_cols:
@@ -1133,6 +1195,24 @@ def get_report_share_payload(endpoint_name):
     return payload if isinstance(payload, dict) else {}
 
 
+def get_report_workshop_id(shared_payload):
+    """Read a valid workshop restriction stored in an external report link."""
+    payload = shared_payload or {}
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (TypeError, ValueError):
+            payload = {}
+    if not isinstance(payload, dict):
+        return None
+    raw_workshop_id = payload.get("workshop_id")
+    try:
+        workshop_id = int(raw_workshop_id) if raw_workshop_id else None
+    except (TypeError, ValueError):
+        return None
+    return workshop_id if workshop_id and db.session.get(Workshop, workshop_id) else None
+
+
 def role_required(*roles):
     def _decor(fn):
         @wraps(fn)
@@ -1276,6 +1356,7 @@ def crm_api_plan_payload(plan):
             "id": item.id,
             "position": item.position,
             "text": item.task_text,
+            "justification": item.justification,
             "deadline_kind": item.deadline_kind,
             "deadline_date": iso_or_none(item.deadline_date),
             "planned_hours": item.planned_hours or 0,
@@ -1368,6 +1449,7 @@ def crm_api_plan_reporting_payload(month_value):
             "plan_id": item.plan_id,
             "position": item.position,
             "text": item.task_text,
+            "justification": item.justification,
             "deadline_kind": item.deadline_kind,
             "deadline_date": iso_or_none(item.deadline_date),
             "planned_hours": item.planned_hours or 0,
@@ -1393,6 +1475,11 @@ def crm_api_validate_plan_item(payload, plan, position, existing=None):
     if not task_text:
         return "Для пункта плана укажите text."
 
+    justification = payload.get("justification", existing.justification if existing else None)
+    justification = crm_api_optional_text(justification)
+    if justification is False:
+        return "justification пункта плана должен быть строкой или null."
+
     executor_id = payload.get("executor_id", existing.executor_id if existing else None)
     executor = crm_api_active_user(executor_id)
     if not executor:
@@ -1407,7 +1494,7 @@ def crm_api_validate_plan_item(payload, plan, position, existing=None):
 
     planned_hours = parse_plan_hours(payload.get("planned_hours", existing.planned_hours if existing else None))
     if planned_hours is None:
-        return "Укажите planned_hours: положительное число часов (допустимы дробные значения)."
+        return "planned_hours должен быть числом от 0 до 10000; пустое значение считается 0."
 
     status = payload.get("status", existing.status if existing else "planned")
     if status not in PLAN_ITEM_STATUSES:
@@ -1422,6 +1509,7 @@ def crm_api_validate_plan_item(payload, plan, position, existing=None):
 
     item = existing or PlanItem(plan_id=plan.id, position=position)
     item.task_text = task_text
+    item.justification = justification
     item.executor_id = executor.id
     item.deadline_kind = deadline_kind
     item.deadline_date = deadline_date
@@ -2013,6 +2101,7 @@ def report_external_links():
     if request.method == "POST":
         report_key = (request.form.get("report_key") or "").strip()
         expires_raw = (request.form.get("expires_at") or "").strip()
+        workshop_id = (request.form.get("workshop_id") or "").strip()
         if report_key not in REPORT_SHARE_OPTIONS:
             flash("Выберите отчет.", "warning")
             return redirect(request.url)
@@ -2024,9 +2113,15 @@ def report_external_links():
         if expires_at <= dt.datetime.utcnow():
             flash("Дата окончания доступа должна быть в будущем.", "warning")
             return redirect(request.url)
+        payload = {}
+        if report_key in {"plans_statistics", "plans_monthly_report"} and workshop_id:
+            if not workshop_id.isdigit() or not db.session.get(Workshop, int(workshop_id)):
+                flash("Выберите существующий цех.", "warning")
+                return redirect(request.url)
+            payload["workshop_id"] = int(workshop_id)
         link = SharedLink(
             doc_type="report:{}".format(report_key), doc_id=0, token=uuid.uuid4().hex,
-            created_by=current_user.id, expires_at=expires_at, payload={},
+            created_by=current_user.id, expires_at=expires_at, payload=payload,
         )
         db.session.add(link)
         db.session.commit()
@@ -2043,10 +2138,12 @@ def report_external_links():
         links.append({
             "id": link.id, "label": option["label"], "expires_at": link.expires_at,
             "created_at": link.created_at, "url": url_for(option["endpoint"], share=link.token, _external=True),
+            "workshop": db.session.get(Workshop, get_report_workshop_id(link.payload)) if get_report_workshop_id(link.payload) else None,
         })
     return render_template(
         "report_external_links.html", title="Внешние ссылки на отчеты", report_options=REPORT_SHARE_OPTIONS,
-        links=links, created_url=created_url, default_expires=(dt.datetime.now() + dt.timedelta(days=7)).strftime("%Y-%m-%dT%H:%M"),
+        links=links, workshops=Workshop.query.order_by(Workshop.name).all(), created_url=created_url,
+        default_expires=(dt.datetime.now() + dt.timedelta(days=7)).strftime("%Y-%m-%dT%H:%M"),
     )
 
 
@@ -2823,8 +2920,9 @@ def activities_analytics():
     extra_rows.sort(key=lambda row: (-row["tasks_count"], row["name"]))
     chart_data["extra_labels"] = [row["name"] for row in extra_rows[:10]]
     chart_data["extra_tasks_count"] = [row["tasks_count"] for row in extra_rows[:10]]
+    template_name = "activities_analytics_print.html" if request.args.get("print") == "1" else "activities_analytics.html"
     return render_template(
-        "activities_analytics.html",
+        template_name,
         title="Аналитика задач",
         summary=summary,
         department_rows=department_rows,
@@ -2839,6 +2937,619 @@ def activities_analytics():
         is_manager=is_manager,
         extra_rows=extra_rows,
     )
+
+
+# --- Журнал графиков ---
+SCHEDULE_STATUSES = {
+    "planned": {"label": "Запланировано", "class": "bg-secondary"},
+    "in_progress": {"label": "В работе", "class": "bg-warning text-dark"},
+    "done": {"label": "Выполнено", "class": "bg-success"},
+    "not_done": {"label": "Не выполнено", "class": "bg-danger"},
+    "cancelled": {"label": "Отменено", "class": "bg-dark"},
+}
+
+
+def schedule_deadline_meta(item, today=None):
+    """Return an urgency colour for a schedule item based on its effective due date."""
+    today = today or dt.date.today()
+    if item.status == "done":
+        return {"label": "Выполнено", "color": "#198754", "text_color": "#ffffff"}
+    if item.status == "cancelled":
+        return {"label": "Отменено", "color": "#6c757d", "text_color": "#ffffff"}
+    if item.status == "not_done":
+        return {"label": "Не выполнено", "color": "#dc3545", "text_color": "#ffffff"}
+
+    deadline = item.item_date
+    if item.activity and item.activity.end_date:
+        deadline = item.activity.end_date.date()
+    days_left = (deadline - today).days
+    if days_left <= 0:
+        return {"label": "Просрочено" if days_left < 0 else "Срок сегодня", "color": "#dc3545", "text_color": "#ffffff"}
+    if days_left == 1:
+        return {"label": "1 день", "color": "#e85d04", "text_color": "#ffffff"}
+    if days_left <= 3:
+        return {"label": "{} дн.".format(days_left), "color": "#f59f00", "text_color": "#212529"}
+    if days_left <= 6:
+        return {"label": "{} дн.".format(days_left), "color": "#b6c600", "text_color": "#212529"}
+    return {"label": "{} дн.".format(days_left), "color": "#198754", "text_color": "#ffffff"}
+
+
+app.jinja_env.globals["schedule_deadline_meta"] = schedule_deadline_meta
+
+
+def can_edit_schedule_entry(entry):
+    return current_user.role in ("admin", "superadmin", "deputy") or entry.created_by_id == current_user.id or entry.responsible_id == current_user.id
+
+
+def schedule_entry_options():
+    """Keep the link pickers useful without loading an unlimited journal into a form."""
+    users = User.query.filter_by(is_approved=True, is_enabled=True).order_by(User.full_name).all()
+    activities = Activity.query.options(joinedload(Activity.owner)).filter(
+        Activity.archived_at.is_(None)
+    ).order_by(Activity.start_date.desc(), Activity.id.desc()).limit(500).all()
+    memos = Letter.query.filter(
+        Letter.source_id == ensure_memo_source(),
+        Letter.archived_at.is_(None),
+    ).order_by(Letter.letter_date.desc(), Letter.id.desc()).limit(500).all()
+    return users, activities, memos
+
+
+@app.get("/schedule-entries")
+@login_required
+def schedules_page():
+    today = dt.date.today()
+    first_day = today.replace(day=1)
+    next_month = (first_day.replace(day=28) + dt.timedelta(days=4)).replace(day=1)
+    last_day = next_month - dt.timedelta(days=1)
+    date_from_value = (request.args.get("date_from") or first_day.isoformat()).strip()
+    date_to_value = (request.args.get("date_to") or last_day.isoformat()).strip()
+    responsible_id = (request.args.get("responsible_id") or "").strip()
+    selected_status = (request.args.get("status") or "").strip()
+    try:
+        date_from = dt.datetime.strptime(date_from_value, "%Y-%m-%d").date()
+        date_to = dt.datetime.strptime(date_to_value, "%Y-%m-%d").date()
+    except ValueError:
+        date_from, date_to = first_day, last_day
+        date_from_value, date_to_value = first_day.isoformat(), last_day.isoformat()
+
+    query = ScheduleEntry.query.options(
+        joinedload(ScheduleEntry.responsible), joinedload(ScheduleEntry.creator),
+        joinedload(ScheduleEntry.activity), joinedload(ScheduleEntry.memo),
+    ).filter(ScheduleEntry.schedule_date >= date_from, ScheduleEntry.schedule_date <= date_to)
+    if responsible_id.isdigit():
+        query = query.filter(ScheduleEntry.responsible_id == int(responsible_id))
+    else:
+        responsible_id = ""
+    if selected_status in SCHEDULE_STATUSES:
+        query = query.filter(ScheduleEntry.status == selected_status)
+    else:
+        selected_status = ""
+    pagination = query.order_by(ScheduleEntry.schedule_date.desc(), ScheduleEntry.id.desc()).paginate(
+        page=request.args.get("page", 1, type=int) or 1, per_page=50, error_out=False
+    )
+    users = User.query.filter_by(is_approved=True, is_enabled=True).order_by(User.full_name).all()
+    return render_template(
+        "schedules.html", title="Журнал графиков", entries=pagination.items, pagination=pagination,
+        users=users, date_from=date_from_value, date_to=date_to_value,
+        selected_responsible_id=responsible_id, selected_status=selected_status,
+        statuses=SCHEDULE_STATUSES,
+    )
+
+
+@app.route("/schedules/create", methods=["GET", "POST"])
+@login_required
+def schedule_create():
+    users, activities, memos = schedule_entry_options()
+    if request.method == "POST":
+        date_raw = (request.form.get("schedule_date") or "").strip()
+        text_value = (request.form.get("text") or "").strip()
+        responsible_id = request.form.get("responsible_id", type=int)
+        activity_id = request.form.get("activity_id", type=int)
+        memo_id = request.form.get("memo_id", type=int)
+        try:
+            schedule_date = dt.datetime.strptime(date_raw, "%Y-%m-%d").date()
+        except ValueError:
+            schedule_date = None
+        responsible = db.session.get(User, responsible_id) if responsible_id else None
+        activity = db.session.get(Activity, activity_id) if activity_id else None
+        memo = db.session.get(Letter, memo_id) if memo_id else None
+        if not schedule_date or not text_value or not responsible or not responsible.is_approved or not responsible.is_enabled:
+            flash("Укажите дату, текст и действующего ответственного.", "warning")
+        elif activity and activity.archived_at:
+            flash("Нельзя привязать архивную задачу.", "warning")
+        elif memo and (memo.archived_at or memo.source_id != ensure_memo_source()):
+            flash("Выберите действующую служебную записку.", "warning")
+        else:
+            entry = ScheduleEntry(
+                schedule_date=schedule_date,
+                text=text_value,
+                responsible_id=responsible.id,
+                activity_id=activity.id if activity else None,
+                memo_id=memo.id if memo else None,
+                created_by_id=current_user.id if current_user.id != -1 else None,
+            )
+            db.session.add(entry)
+            db.session.commit()
+            flash("Запись графика создана.", "success")
+            return redirect(url_for("schedule_detail", schedule_id=entry.id))
+    return render_template(
+        "schedule_form.html", title="Создание графика", entry=None, users=users,
+        activities=activities, memos=memos, statuses=SCHEDULE_STATUSES, today=dt.date.today(),
+    )
+
+
+@app.route("/schedules/<int:schedule_id>", methods=["GET", "POST"])
+@login_required
+def schedule_detail(schedule_id):
+    entry = ScheduleEntry.query.options(
+        joinedload(ScheduleEntry.responsible), joinedload(ScheduleEntry.creator),
+        joinedload(ScheduleEntry.activity), joinedload(ScheduleEntry.memo),
+    ).get_or_404(schedule_id)
+    can_edit = can_edit_schedule_entry(entry)
+    users, activities, memos = schedule_entry_options()
+    if request.method == "POST":
+        if not can_edit:
+            abort(403)
+        date_raw = (request.form.get("schedule_date") or "").strip()
+        text_value = (request.form.get("text") or "").strip()
+        responsible_id = request.form.get("responsible_id", type=int)
+        status = (request.form.get("status") or "").strip()
+        completion_comment = (request.form.get("completion_comment") or "").strip()
+        activity_id = request.form.get("activity_id", type=int)
+        memo_id = request.form.get("memo_id", type=int)
+        try:
+            schedule_date = dt.datetime.strptime(date_raw, "%Y-%m-%d").date()
+        except ValueError:
+            schedule_date = None
+        responsible = db.session.get(User, responsible_id) if responsible_id else None
+        activity = db.session.get(Activity, activity_id) if activity_id else None
+        memo = db.session.get(Letter, memo_id) if memo_id else None
+        if not schedule_date or not text_value or not responsible or not responsible.is_approved or not responsible.is_enabled:
+            flash("Укажите дату, текст и действующего ответственного.", "warning")
+        elif status not in SCHEDULE_STATUSES:
+            flash("Выберите корректный статус выполнения.", "warning")
+        elif activity and activity.archived_at:
+            flash("Нельзя привязать архивную задачу.", "warning")
+        elif memo and (memo.archived_at or memo.source_id != ensure_memo_source()):
+            flash("Выберите действующую служебную записку.", "warning")
+        else:
+            entry.schedule_date = schedule_date
+            entry.text = text_value
+            entry.responsible_id = responsible.id
+            entry.status = status
+            entry.completion_comment = completion_comment or None
+            entry.activity_id = activity.id if activity else None
+            entry.memo_id = memo.id if memo else None
+            entry.completed_at = dt.datetime.utcnow() if status == "done" else None
+            db.session.commit()
+            flash("Запись графика сохранена.", "success")
+            return redirect(url_for("schedule_detail", schedule_id=entry.id))
+    return render_template(
+        "schedule_form.html", title="График", entry=entry, users=users, activities=activities,
+        memos=memos, statuses=SCHEDULE_STATUSES, can_edit=can_edit, today=dt.date.today(),
+        activity_types=ActivityType.query.order_by(ActivityType.name).all(),
+        departments=Department.query.order_by(Department.name).all(),
+    )
+
+
+@app.post("/schedules/<int:schedule_id>/create-task")
+@login_required
+def schedule_create_task(schedule_id):
+    entry = db.session.get(ScheduleEntry, schedule_id)
+    if not entry:
+        abort(404)
+    if not can_edit_schedule_entry(entry):
+        abort(403)
+    title = (request.form.get("title") or "").strip()
+    description = (request.form.get("description") or "").strip()
+    type_id = request.form.get("type_id", type=int)
+    end_raw = (request.form.get("end_date") or "").strip()
+    activity_type = db.session.get(ActivityType, type_id) if type_id else None
+    if not title or not activity_type:
+        flash("Укажите название и тип новой задачи.", "warning")
+        return redirect(url_for("schedule_detail", schedule_id=entry.id))
+    try:
+        end_date = dt.datetime.strptime(end_raw, "%Y-%m-%d").date() if end_raw else entry.schedule_date
+    except ValueError:
+        flash("Некорректная дата окончания задачи.", "warning")
+        return redirect(url_for("schedule_detail", schedule_id=entry.id))
+    if end_date < entry.schedule_date:
+        flash("Срок задачи не может быть раньше даты графика.", "warning")
+        return redirect(url_for("schedule_detail", schedule_id=entry.id))
+    activity = Activity(
+        type_id=activity_type.id,
+        owner_id=entry.responsible_id,
+        created_by_id=current_user.id if current_user.id != -1 else None,
+        title=title,
+        description=description or None,
+        start_date=dt.datetime.combine(entry.schedule_date, dt.time.min),
+        end_date=dt.datetime.combine(end_date, dt.time.max),
+        status="in_progress",
+        priority=3,
+        complexity_level=3,
+    )
+    db.session.add(activity)
+    db.session.flush()
+    entry.activity_id = activity.id
+    add_activity_history(activity, "Создание задачи", "Задача создана из графика №{}.".format(entry.id))
+    db.session.commit()
+    flash("Задача создана и привязана к графику.", "success")
+    return redirect(url_for("schedule_detail", schedule_id=entry.id))
+
+
+@app.post("/schedules/<int:schedule_id>/create-memo")
+@login_required
+def schedule_create_memo(schedule_id):
+    entry = db.session.get(ScheduleEntry, schedule_id)
+    if not entry:
+        abort(404)
+    if not can_edit_schedule_entry(entry):
+        abort(403)
+    subject = (request.form.get("subject") or "").strip()
+    body = (request.form.get("body") or "").strip()
+    department_id = request.form.get("department_id", type=int)
+    department = db.session.get(Department, department_id) if department_id else None
+    if not subject or not department:
+        flash("Укажите тему и отдел служебной записки.", "warning")
+        return redirect(url_for("schedule_detail", schedule_id=entry.id))
+    memo = Letter(
+        reg_number=generate_next_memo_reg_number(department.id),
+        subject=subject,
+        body=body,
+        author_id=current_user.id if current_user.id != -1 else None,
+        executor_id=entry.responsible_id,
+        source_id=ensure_memo_source(),
+        letter_date=entry.schedule_date,
+    )
+    if not validate_reg_number_uniqueness(memo.reg_number, is_memo=True):
+        flash("Не удалось подобрать уникальный номер служебной записки. Повторите попытку.", "warning")
+        return redirect(url_for("schedule_detail", schedule_id=entry.id))
+    memo.departments.append(department)
+    db.session.add(memo)
+    db.session.flush()
+    db.session.add(LetterRecipient(letter_id=memo.id, user_id=entry.responsible_id, role="executor"))
+    entry.memo_id = memo.id
+    db.session.commit()
+    flash("Служебная записка создана и привязана к графику.", "success")
+    return redirect(url_for("schedule_detail", schedule_id=entry.id))
+
+
+@app.post("/schedules/<int:schedule_id>/delete")
+@login_required
+def schedule_delete(schedule_id):
+    entry = db.session.get(ScheduleEntry, schedule_id)
+    if not entry:
+        abort(404)
+    if current_user.role not in ("admin", "superadmin", "deputy") and entry.created_by_id != current_user.id:
+        abort(403)
+    db.session.delete(entry)
+    db.session.commit()
+    flash("Запись графика удалена.", "success")
+    return redirect(url_for("schedules_page"))
+
+
+def can_manage_schedule(schedule):
+    return current_user.role in ("admin", "superadmin", "deputy") or schedule.created_by_id == current_user.id
+
+
+def can_view_schedule(schedule):
+    if current_user.role in ("admin", "superadmin", "deputy") or schedule.created_by_id == current_user.id:
+        return True
+    return any(item.responsible_id == current_user.id for item in schedule.items)
+
+
+def can_edit_schedule_item(schedule, item):
+    return can_manage_schedule(schedule) or item.responsible_id == current_user.id
+
+
+def can_assign_schedule_responsible(user):
+    """Workers create schedule-related documents only for themselves."""
+    if not user or not user.is_approved or not user.is_enabled:
+        return False
+    return current_user.role in ("deputy", "admin", "superadmin") or user.id == current_user.id
+
+
+def schedule_item_form_values():
+    users_query = User.query.filter_by(is_approved=True, is_enabled=True)
+    if current_user.role not in ("deputy", "admin", "superadmin"):
+        users_query = users_query.filter(User.id == current_user.id)
+    users = users_query.order_by(User.full_name).all()
+    activities = Activity.query.options(joinedload(Activity.owner)).filter(Activity.archived_at.is_(None)).order_by(
+        Activity.start_date.desc(), Activity.id.desc()
+    ).limit(500).all()
+    memos = Letter.query.filter(Letter.source_id == ensure_memo_source(), Letter.archived_at.is_(None)).order_by(
+        Letter.letter_date.desc(), Letter.id.desc()
+    ).limit(500).all()
+    return users, activities, memos
+
+
+def build_schedule_gantt(schedule):
+    """Build lightweight Gantt coordinates without an external JavaScript library."""
+    rows = []
+    boundaries = [schedule.schedule_date]
+    for item in schedule.items:
+        start = item.item_date
+        end = item.item_date
+        if item.activity:
+            if item.activity.start_date:
+                start = item.activity.start_date.date()
+            if item.activity.end_date:
+                end = item.activity.end_date.date()
+        if end < start:
+            end = start
+        boundaries.extend((start, end))
+        rows.append({"item": item, "start": start, "end": end, "deadline": schedule_deadline_meta(item)})
+    range_start, range_end = min(boundaries), max(boundaries)
+    total_days = max((range_end - range_start).days + 1, 1)
+    for row in rows:
+        row["left"] = round(((row["start"] - range_start).days / total_days) * 100, 3)
+        row["width"] = max(round((((row["end"] - row["start"]).days + 1) / total_days) * 100, 3), 2.5)
+        row["status"] = SCHEDULE_STATUSES.get(row["item"].status, SCHEDULE_STATUSES["planned"])
+    labels = []
+    cursor = range_start
+    while cursor <= range_end:
+        if cursor == range_start or cursor.day == 1 or cursor.weekday() == 0:
+            labels.append({
+                "left": round(((cursor - range_start).days / total_days) * 100, 3),
+                "label": cursor.strftime("%d.%m"),
+            })
+        cursor += dt.timedelta(days=1)
+    return {"start": range_start, "end": range_end, "days": total_days, "rows": rows, "labels": labels}
+
+
+@app.route("/schedules/journal", methods=["GET", "POST"])
+@login_required
+def schedules_journal_page():
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()
+        description = (request.form.get("description") or "").strip()
+        date_raw = (request.form.get("schedule_date") or "").strip()
+        try:
+            schedule_date = dt.datetime.strptime(date_raw, "%Y-%m-%d").date() if date_raw else dt.date.today()
+        except ValueError:
+            schedule_date = None
+        if not title or not schedule_date:
+            flash("Укажите название и дату графика.", "warning")
+        else:
+            schedule = Schedule(
+                title=title, schedule_date=schedule_date, description=description or None,
+                created_by_id=current_user.id if current_user.id != -1 else None,
+            )
+            db.session.add(schedule)
+            db.session.commit()
+            flash("График создан. Добавьте в него пункты.", "success")
+            return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+
+    date_from_value = (request.args.get("date_from") or "").strip()
+    date_to_value = (request.args.get("date_to") or "").strip()
+    query = Schedule.query.options(joinedload(Schedule.creator), joinedload(Schedule.items))
+    if current_user.role not in ("admin", "superadmin", "deputy"):
+        query = query.filter(or_(
+            Schedule.created_by_id == current_user.id,
+            Schedule.items.any(ScheduleItem.responsible_id == current_user.id),
+        ))
+    if date_from_value:
+        try:
+            query = query.filter(Schedule.schedule_date >= dt.datetime.strptime(date_from_value, "%Y-%m-%d").date())
+        except ValueError:
+            date_from_value = ""
+    if date_to_value:
+        try:
+            query = query.filter(Schedule.schedule_date <= dt.datetime.strptime(date_to_value, "%Y-%m-%d").date())
+        except ValueError:
+            date_to_value = ""
+    pagination = query.order_by(Schedule.schedule_date.desc(), Schedule.id.desc()).paginate(
+        page=request.args.get("page", 1, type=int) or 1, per_page=30, error_out=False
+    )
+    return render_template(
+        "schedules_journal.html", title="Журнал графиков", schedules=pagination.items, pagination=pagination,
+        date_from=date_from_value, date_to=date_to_value, today=dt.date.today(), statuses=SCHEDULE_STATUSES,
+    )
+
+
+@app.route("/schedules/journal/<int:schedule_id>", methods=["GET", "POST"])
+@login_required
+def schedule_document_detail(schedule_id):
+    schedule = Schedule.query.options(
+        joinedload(Schedule.creator),
+        joinedload(Schedule.items).joinedload(ScheduleItem.responsible),
+        joinedload(Schedule.items).joinedload(ScheduleItem.activity),
+        joinedload(Schedule.items).joinedload(ScheduleItem.memo),
+    ).get_or_404(schedule_id)
+    if not can_view_schedule(schedule):
+        abort(403)
+    can_manage = can_manage_schedule(schedule)
+    users, activities, memos = schedule_item_form_values()
+
+    if request.method == "POST":
+        if not can_manage:
+            abort(403)
+        title = (request.form.get("title") or "").strip()
+        description = (request.form.get("description") or "").strip()
+        date_raw = (request.form.get("schedule_date") or "").strip()
+        try:
+            schedule_date = dt.datetime.strptime(date_raw, "%Y-%m-%d").date()
+        except ValueError:
+            schedule_date = None
+        if not title or not schedule_date:
+            flash("Укажите название и дату графика.", "warning")
+        else:
+            schedule.title, schedule.description, schedule.schedule_date = title, description or None, schedule_date
+            db.session.commit()
+            flash("График сохранён.", "success")
+            return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+    return render_template(
+        "schedule_document_detail.html", title="График", schedule=schedule, can_manage=can_manage,
+        users=users, activities=activities, memos=memos, activity_types=ActivityType.query.order_by(ActivityType.name).all(),
+        departments=Department.query.order_by(Department.name).all(), statuses=SCHEDULE_STATUSES,
+        gantt=build_schedule_gantt(schedule),
+    )
+
+
+@app.post("/schedules/journal/<int:schedule_id>/items")
+@login_required
+def schedule_document_add_item(schedule_id):
+    schedule = db.session.get(Schedule, schedule_id)
+    if not schedule:
+        abort(404)
+    if not can_manage_schedule(schedule):
+        abort(403)
+    item_date_raw = (request.form.get("item_date") or "").strip()
+    text_value = (request.form.get("text") or "").strip()
+    responsible_id = request.form.get("responsible_id", type=int)
+    activity_id = request.form.get("activity_id", type=int)
+    memo_id = request.form.get("memo_id", type=int)
+    try:
+        item_date = dt.datetime.strptime(item_date_raw, "%Y-%m-%d").date()
+    except ValueError:
+        item_date = None
+    responsible = db.session.get(User, responsible_id) if responsible_id else None
+    activity = db.session.get(Activity, activity_id) if activity_id else None
+    memo = db.session.get(Letter, memo_id) if memo_id else None
+    if not item_date or not text_value or not can_assign_schedule_responsible(responsible):
+        flash("Укажите дату, текст и доступного вам ответственного.", "warning")
+    elif activity and activity.archived_at:
+        flash("Нельзя привязать архивную задачу.", "warning")
+    elif memo and (memo.archived_at or memo.source_id != ensure_memo_source()):
+        flash("Выберите действующую служебную записку.", "warning")
+    else:
+        position = max((item.position for item in schedule.items), default=0) + 1
+        db.session.add(ScheduleItem(
+            schedule_id=schedule.id, position=position, item_date=item_date, text=text_value,
+            responsible_id=responsible.id, activity_id=activity.id if activity else None,
+            memo_id=memo.id if memo else None,
+        ))
+        db.session.commit()
+        flash("Пункт добавлен в график.", "success")
+    return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+
+
+@app.post("/schedules/journal/<int:schedule_id>/items/<int:item_id>")
+@login_required
+def schedule_document_update_item(schedule_id, item_id):
+    schedule = db.session.get(Schedule, schedule_id)
+    item = ScheduleItem.query.filter_by(id=item_id, schedule_id=schedule_id).first_or_404()
+    if not schedule or not can_edit_schedule_item(schedule, item):
+        abort(403)
+    status = (request.form.get("status") or "").strip()
+    comment = (request.form.get("completion_comment") or "").strip()
+    if status not in SCHEDULE_STATUSES:
+        abort(400)
+    item.status = status
+    item.completion_comment = comment or None
+    item.completed_at = dt.datetime.utcnow() if status == "done" else None
+    db.session.commit()
+    flash("Результат выполнения сохранён.", "success")
+    return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+
+
+@app.post("/schedules/journal/<int:schedule_id>/items/<int:item_id>/delete")
+@login_required
+def schedule_document_delete_item(schedule_id, item_id):
+    schedule = db.session.get(Schedule, schedule_id)
+    item = ScheduleItem.query.filter_by(id=item_id, schedule_id=schedule_id).first_or_404()
+    if not schedule or not can_manage_schedule(schedule):
+        abort(403)
+    db.session.delete(item)
+    db.session.commit()
+    flash("Пункт удалён из графика.", "success")
+    return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+
+
+@app.post("/schedules/journal/<int:schedule_id>/create-task")
+@login_required
+def schedule_document_create_task(schedule_id):
+    schedule = db.session.get(Schedule, schedule_id)
+    if not schedule or not can_manage_schedule(schedule):
+        abort(403)
+    item_id = request.form.get("item_id", type=int)
+    item = ScheduleItem.query.filter_by(id=item_id, schedule_id=schedule.id).first() if item_id else None
+    if not item:
+        flash("Выберите пункт графика, для которого создаётся задача.", "warning")
+        return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+    if item.activity_id:
+        flash("К этому пункту уже привязана задача.", "warning")
+        return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+    title = (request.form.get("title") or "").strip()
+    type_id = request.form.get("type_id", type=int)
+    responsible_id = request.form.get("responsible_id", type=int)
+    end_raw = (request.form.get("end_date") or "").strip()
+    activity_type = db.session.get(ActivityType, type_id) if type_id else None
+    responsible = db.session.get(User, responsible_id) if responsible_id else None
+    try:
+        end_date = dt.datetime.strptime(end_raw, "%Y-%m-%d").date() if end_raw else item.item_date
+    except ValueError:
+        end_date = None
+    if not title or not activity_type or not can_assign_schedule_responsible(responsible) or not end_date:
+        flash("Укажите название, тип, доступного вам ответственного и срок задачи.", "warning")
+        return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+    activity = Activity(type_id=activity_type.id, owner_id=responsible.id, created_by_id=current_user.id,
+        title=title, start_date=dt.datetime.combine(item.item_date, dt.time.min),
+        end_date=dt.datetime.combine(end_date, dt.time.max), status="in_progress", priority=3, complexity_level=3)
+    db.session.add(activity)
+    db.session.flush()
+    item.activity_id = activity.id
+    add_activity_history(activity, "Создание задачи", "Задача создана из графика №{}.".format(schedule.id))
+    db.session.commit()
+    flash("Задача создана и привязана к пункту графика.", "success")
+    return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+
+
+@app.post("/schedules/journal/<int:schedule_id>/create-memo")
+@login_required
+def schedule_document_create_memo(schedule_id):
+    schedule = db.session.get(Schedule, schedule_id)
+    if not schedule or not can_manage_schedule(schedule):
+        abort(403)
+    item_id = request.form.get("item_id", type=int)
+    item = ScheduleItem.query.filter_by(id=item_id, schedule_id=schedule.id).first() if item_id else None
+    if not item:
+        flash("Выберите пункт графика, для которого создаётся служебная записка.", "warning")
+        return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+    if item.memo_id:
+        flash("К этому пункту уже привязана служебная записка.", "warning")
+        return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+    subject = (request.form.get("subject") or "").strip()
+    department_id = request.form.get("department_id", type=int)
+    responsible_id = request.form.get("responsible_id", type=int)
+    department = db.session.get(Department, department_id) if department_id else None
+    responsible = db.session.get(User, responsible_id) if responsible_id else None
+    if not subject or not department or not can_assign_schedule_responsible(responsible):
+        flash("Укажите тему, отдел и доступного вам ответственного служебной записки.", "warning")
+        return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+    memo = Letter(reg_number=generate_next_memo_reg_number(department.id), subject=subject,
+        author_id=current_user.id, executor_id=responsible.id, source_id=ensure_memo_source(), letter_date=item.item_date)
+    if not validate_reg_number_uniqueness(memo.reg_number, is_memo=True):
+        flash("Не удалось подобрать уникальный номер служебной записки. Повторите попытку.", "warning")
+        return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+    memo.departments.append(department)
+    db.session.add(memo)
+    db.session.flush()
+    db.session.add(LetterRecipient(letter_id=memo.id, user_id=responsible.id, role="executor"))
+    item.memo_id = memo.id
+    db.session.commit()
+    flash("Служебная записка создана и привязана к пункту графика.", "success")
+    return redirect(url_for("schedule_document_detail", schedule_id=schedule.id))
+
+
+@app.post("/schedules/journal/<int:schedule_id>/delete")
+@login_required
+def schedule_document_delete(schedule_id):
+    schedule = db.session.get(Schedule, schedule_id)
+    if not schedule:
+        abort(404)
+    if not can_manage_schedule(schedule):
+        abort(403)
+    db.session.delete(schedule)
+    db.session.commit()
+    flash("График удалён.", "success")
+    return redirect(url_for("schedules_journal_page"))
+
+
+@app.get("/schedules")
+@login_required
+def schedules_redirect():
+    return redirect(url_for("schedules_journal_page"))
 
 
 # --- Протоколы: административные документы с перечнем обычных задач ---
@@ -3426,7 +4137,7 @@ def edit_activity(activity_id):
             "Приоритет": (get_activity_priority_meta(previous_values["priority"])["label"], get_activity_priority_meta(activity.priority)["label"]),
             "Сложность": (get_activity_complexity_meta(previous_values["complexity"])["label"], get_activity_complexity_meta(activity.complexity_level)["label"]),
             "Тема": (previous_values["direction"], activity.direction or ""),
-            "Исходный документ": (previous_values["outgoing_document"], activity.outgoing_document or ""),
+            "Обоснования": (previous_values["outgoing_document"], activity.outgoing_document or ""),
         }
         changes = ["{}: «{}» -> «{}»".format(label, before or "-", after or "-") for label, (before, after) in updated_values.items() if before != after]
         if changes:
@@ -4812,13 +5523,18 @@ def download_database_backup(filename):
 
 
 @app.get("/admin/letter-sources")
-@role_required("admin", "superadmin")
+@login_required
 def admin_letter_sources():
     sources = LetterSource.query.order_by(LetterSource.name).all()
-    return render_template("admin_letter_sources.html", title="Предприятия", sources=sources)
+    return render_template(
+        "admin_letter_sources.html",
+        title="Предприятия",
+        sources=sources,
+        can_manage_sources=current_user.role in ("admin", "superadmin"),
+    )
 
 @app.post("/admin/letter-sources")
-@role_required("admin", "superadmin")
+@login_required
 def add_letter_source():
     name = request.form.get("name", "").strip()
     bin_code = request.form.get("bin_code", "").strip()
@@ -5965,12 +6681,14 @@ def parse_plan_deadline_date(deadline_kind, raw_date):
 
 
 def parse_plan_hours(raw_hours):
-    """Normalize the planned workload while allowing a comma decimal separator."""
+    """Normalize planned workload; an omitted value is stored as zero hours."""
+    if raw_hours is None or str(raw_hours).strip() == "":
+        return 0.0
     try:
         hours = float(str(raw_hours).strip().replace(",", "."))
     except (TypeError, ValueError):
         return None
-    return round(hours, 2) if 0 < hours <= 10000 else None
+    return round(hours, 2) if 0 <= hours <= 10000 else None
 
 
 def build_plan_department_rows(items):
@@ -6299,6 +7017,7 @@ def plan_create():
         deadlines = request.form.getlist("deadline_kind")
         deadline_dates = request.form.getlist("deadline_date")
         planned_hours_values = request.form.getlist("planned_hours")
+        justifications = request.form.getlist("justification")
 
         rows = []
         for index, task in enumerate(tasks):
@@ -6311,17 +7030,18 @@ def plan_create():
             if not task and not executor_id:
                 continue
             planned_hours = parse_plan_hours(planned_hours_values[index] if index < len(planned_hours_values) else "")
+            justification = (justifications[index] if index < len(justifications) else "").strip() or None
             if not task or not executor_id or deadline not in PLAN_DEADLINES or (deadline == "date" and not deadline_date) or planned_hours is None:
-                flash("В каждой строке укажите исполнителя, мероприятие, срок и плановые часы.", "warning")
+                flash("В каждой строке укажите исполнителя, мероприятие и срок. Плановые часы можно оставить пустыми.", "warning")
                 return redirect(url_for("plan_create"))
-            rows.append((int(executor_id), task, deadline, deadline_date, planned_hours))
+            rows.append((int(executor_id), task, justification, deadline, deadline_date, planned_hours))
 
         if not rows:
             flash("Добавьте хотя бы один пункт плана.", "warning")
             return redirect(url_for("plan_create"))
 
         is_manager = current_user.role in ("admin", "superadmin")
-        if not is_manager and any(executor_id != current_user.id for executor_id, _, _, _, _ in rows):
+        if not is_manager and any(executor_id != current_user.id for executor_id, _, _, _, _, _ in rows):
             abort(403)
         p = Plan(
             start_date=start_date,
@@ -6334,10 +7054,10 @@ def plan_create():
         )
         db.session.add(p)
         db.session.flush()
-        for position, (executor_id, task, deadline, deadline_date, planned_hours) in enumerate(rows, start=1):
+        for position, (executor_id, task, justification, deadline, deadline_date, planned_hours) in enumerate(rows, start=1):
             db.session.add(PlanItem(
                 plan_id=p.id, executor_id=executor_id, position=position,
-                task_text=task, deadline_kind=deadline, deadline_date=deadline_date,
+                task_text=task, justification=justification, deadline_kind=deadline, deadline_date=deadline_date,
                 planned_hours=planned_hours, status="planned",
             ))
         db.session.flush()
@@ -6394,19 +7114,20 @@ def plan_item_create(plan_id):
     if not is_manager and (plan.created_by != current_user.id or plan.approval_status == "approved"):
         abort(403)
     task_text = (request.form.get("task_text") or "").strip()
+    justification = (request.form.get("justification") or "").strip() or None
     executor_id = request.form.get("executor_id", type=int)
     deadline_kind = request.form.get("deadline_kind", "month")
     deadline_date = parse_plan_deadline_date(deadline_kind, request.form.get("deadline_date"))
     planned_hours = parse_plan_hours(request.form.get("planned_hours"))
     if not task_text or not executor_id or deadline_kind not in PLAN_DEADLINES or (deadline_kind == "date" and not deadline_date) or planned_hours is None:
-        flash("Заполните исполнителя, мероприятие, срок и плановые часы.", "warning")
+        flash("Заполните исполнителя, мероприятие и срок. Плановые часы можно оставить пустыми.", "warning")
         return redirect(url_for("plan_detail", plan_id=plan.id))
     if not is_manager and executor_id != current_user.id:
         abort(403)
     position = (max((item.position for item in plan.items), default=0) + 1)
     db.session.add(PlanItem(
         plan_id=plan.id, executor_id=executor_id, position=position,
-        task_text=task_text, deadline_kind=deadline_kind, deadline_date=deadline_date,
+        task_text=task_text, justification=justification, deadline_kind=deadline_kind, deadline_date=deadline_date,
         planned_hours=planned_hours,
     ))
     db.session.commit()
@@ -6447,6 +7168,7 @@ def plan_item_update(item_id):
             item.completed_at = dt.datetime.utcnow()
     if is_manager or (plan.created_by == current_user.id and plan.approval_status != "approved"):
         item.task_text = (request.form.get("task_text") or item.task_text).strip()
+        item.justification = (request.form.get("justification") or "").strip() or None
         deadline_kind = request.form.get("deadline_kind", item.deadline_kind)
         if deadline_kind in PLAN_DEADLINES:
             deadline_date = parse_plan_deadline_date(deadline_kind, request.form.get("deadline_date"))
@@ -6457,7 +7179,7 @@ def plan_item_update(item_id):
             item.deadline_date = deadline_date
         planned_hours = parse_plan_hours(request.form.get("planned_hours"))
         if planned_hours is None:
-            flash("Укажите положительное количество плановых часов.", "warning")
+            flash("Плановые часы должны быть числом от 0 до 10000.", "warning")
             return redirect(url_for("plan_detail", plan_id=item.plan_id))
         item.planned_hours = planned_hours
         executor_id = request.form.get("executor_id", type=int)
@@ -6755,7 +7477,27 @@ def activities_events():
             })
 
     return jsonify(events)
-# === 🔔 API: уведомления о задачах со сроком завтра ===
+# === 🔔 API: напоминания о сроках задач, планов и графиков ===
+def plan_item_reminder_deadline(item):
+    if item.deadline_date:
+        return item.deadline_date
+    if item.deadline_kind in ("q1", "q2", "q3", "q4") and item.plan and item.plan.start_date:
+        from calendar import monthrange
+        quarter_end_month = int(item.deadline_kind[-1]) * 3
+        year = item.plan.start_date.year
+        return dt.date(year, quarter_end_month, monthrange(year, quarter_end_month)[1])
+    return item.plan.end_date if item.plan else None
+
+
+def deadline_reminder_prefix(deadline, today):
+    days_left = (deadline - today).days
+    if days_left < 0:
+        return "Просрочено на {} дн.".format(abs(days_left)), days_left
+    if days_left in (6, 3, 1):
+        return "Срок через {} дн.".format(days_left), days_left
+    return None, days_left
+
+
 @app.route("/api/notifications")
 @login_required
 def notifications():
@@ -6768,14 +7510,44 @@ def notifications():
     reminders = []
     for task in tasks:
         deadline = task.end_date.date() if isinstance(task.end_date, dt.datetime) else task.end_date
-        days_left = (deadline - today).days
-        if days_left < 0:
-            prefix = "Просрочена на {} дн.".format(abs(days_left))
-        elif days_left in (1, 3, 7):
-            prefix = "Срок через {} дн.".format(days_left)
-        else:
+        prefix, days_left = deadline_reminder_prefix(deadline, today)
+        if not prefix:
             continue
-        reminders.append({"title": "{}: {}".format(prefix, task.title), "days_left": days_left})
+        reminders.append({"title": "Задача. {}: {}".format(prefix, task.title), "days_left": days_left})
+
+    plan_items = (
+        PlanItem.query.options(joinedload(PlanItem.plan))
+        .filter(PlanItem.executor_id == current_user.id, PlanItem.status == "planned")
+        .all()
+    )
+    for item in plan_items:
+        deadline = plan_item_reminder_deadline(item)
+        if not deadline:
+            continue
+        prefix, days_left = deadline_reminder_prefix(deadline, today)
+        if prefix:
+            reminders.append({
+                "title": "План. {}: {}".format(prefix, item.task_text),
+                "days_left": days_left,
+            })
+
+    schedule_items = (
+        ScheduleItem.query.options(joinedload(ScheduleItem.schedule), joinedload(ScheduleItem.activity))
+        .filter(
+            ScheduleItem.responsible_id == current_user.id,
+            ScheduleItem.status.in_(["planned", "in_progress"]),
+        )
+        .all()
+    )
+    for item in schedule_items:
+        deadline = item.activity.end_date.date() if item.activity and item.activity.end_date else item.item_date
+        prefix, days_left = deadline_reminder_prefix(deadline, today)
+        if prefix:
+            schedule_title = item.schedule.title if item.schedule else "График"
+            reminders.append({
+                "title": "График «{}». {}: {}".format(schedule_title, prefix, item.text),
+                "days_left": days_left,
+            })
 
     count = len(reminders)
     if count == 0:
@@ -6783,7 +7555,7 @@ def notifications():
     return jsonify({
         "count": count,
         "titles": [item["title"] for item in reminders],
-        "message": "У вас {} задач(и), требующих внимания по сроку.".format(count),
+        "message": "У вас {} пункт(ов), требующих внимания по сроку.".format(count),
     })
 
 
@@ -6798,11 +7570,27 @@ def send_user_notification():
         target_id = (request.form.get("target_id") or "").strip()
         title = (request.form.get("title") or "").strip()
         message = (request.form.get("message") or "").strip()
+        scheduled_raw = (request.form.get("scheduled_at") or "").strip()
+        background_color = (request.form.get("background_color") or "#0d6efd").strip().lower()
         recipients = []
 
         if not title or not message:
             flash("Заполните заголовок и текст уведомления.", "warning")
             return redirect(request.url)
+        if not re.fullmatch(r"#[0-9a-f]{6}", background_color):
+            flash("Цвет фона должен быть указан в формате #RRGGBB.", "warning")
+            return redirect(request.url)
+        if scheduled_raw:
+            try:
+                scheduled_at = dt.datetime.strptime(scheduled_raw, "%Y-%m-%dT%H:%M")
+            except ValueError:
+                flash("Укажите дату и время отправки.", "warning")
+                return redirect(request.url)
+            if scheduled_at < dt.datetime.now() - dt.timedelta(minutes=1):
+                flash("Время отправки не может быть в прошлом.", "warning")
+                return redirect(request.url)
+        else:
+            scheduled_at = dt.datetime.now()
 
         if target_type == "all":
             recipients = users
@@ -6825,11 +7613,16 @@ def send_user_notification():
                 sender_id=sender_id,
                 title=title,
                 message=message,
+                scheduled_at=scheduled_at,
+                background_color=background_color,
             )
             for user in recipients
         ])
         db.session.commit()
-        flash("Уведомление отправлено: получателей {}.".format(len(recipients)), "success")
+        if scheduled_raw:
+            flash("Уведомление запланировано на {}: получателей {}.".format(scheduled_at.strftime("%d.%m.%Y %H:%M"), len(recipients)), "success")
+        else:
+            flash("Уведомление отправлено: получателей {}.".format(len(recipients)), "success")
         return redirect(url_for("send_user_notification"))
 
     return render_template(
@@ -6843,16 +7636,17 @@ def send_user_notification():
 @app.get("/notifications")
 @login_required
 def user_notifications_page():
+    now = dt.datetime.now()
     notifications_list = (
         UserNotification.query
-        .filter_by(user_id=current_user.id)
-        .order_by(UserNotification.created_at.desc())
+        .filter(UserNotification.user_id == current_user.id)
+        .filter(or_(UserNotification.scheduled_at.is_(None), UserNotification.scheduled_at <= now))
+        .order_by(UserNotification.scheduled_at.desc(), UserNotification.id.desc())
         .limit(100)
         .all()
     )
     unread = [item for item in notifications_list if item.read_at is None]
     if unread:
-        now = dt.datetime.utcnow()
         for item in unread:
             item.read_at = now
         db.session.commit()
@@ -6866,10 +7660,12 @@ def user_notifications_page():
 @app.get("/api/user-notifications")
 @login_required
 def user_notifications_api():
+    now = dt.datetime.now()
     notifications_list = (
         UserNotification.query
-        .filter_by(user_id=current_user.id)
-        .order_by(UserNotification.created_at.desc())
+        .filter(UserNotification.user_id == current_user.id)
+        .filter(or_(UserNotification.scheduled_at.is_(None), UserNotification.scheduled_at <= now))
+        .order_by(UserNotification.scheduled_at.desc(), UserNotification.id.desc())
         .limit(20)
         .all()
     )
@@ -6882,6 +7678,8 @@ def user_notifications_api():
                 "title": item.title,
                 "message": item.message,
                 "created_at": item.created_at.strftime("%d.%m.%Y %H:%M"),
+                "scheduled_at": (item.scheduled_at or item.created_at).strftime("%d.%m.%Y %H:%M"),
+                "background_color": item.background_color or "#0d6efd",
                 "is_read": item.read_at is not None,
             }
             for item in notifications_list
@@ -6910,13 +7708,15 @@ def plans_statistics():
         return redirect(url_for("plans_statistics"))
     period_start, period_end = period
     month_value = period_start.strftime("%Y-%m")
+    workshop_id = get_report_workshop_id(shared_payload)
 
-    items = (
+    items_query = (
         PlanItem.query.options(joinedload(PlanItem.linked_activity)).join(Plan).join(User, PlanItem.executor_id == User.id)
         .filter(Plan.start_date <= period_end, Plan.end_date >= period_start)
-        .order_by(PlanItem.executor_id, PlanItem.position)
-        .all()
     )
+    if workshop_id:
+        items_query = items_query.join(Department, User.department_id == Department.id).filter(Department.workshop_id == workshop_id)
+    items = items_query.order_by(PlanItem.executor_id, PlanItem.position).all()
     is_manager = shared_payload is not None or getattr(current_user, "role", None) in ("admin", "superadmin")
     if not is_manager:
         items = [item for item in items if item.executor_id == current_user.id]
@@ -6968,17 +7768,19 @@ def plans_monthly_report():
         return redirect(url_for("plans_monthly_report"))
     period_start, period_end = period
     month_value = period_start.strftime("%Y-%m")
-    plans = Plan.query.filter(Plan.start_date <= period_end, Plan.end_date >= period_start).all()
-    items = (
-        PlanItem.query.join(Plan).join(User, PlanItem.executor_id == User.id)
+    workshop_id = get_report_workshop_id(shared_payload)
+    items_query = (
+        PlanItem.query.options(joinedload(PlanItem.linked_activity)).join(Plan).join(User, PlanItem.executor_id == User.id)
         .filter(Plan.start_date <= period_end, Plan.end_date >= period_start)
-        .order_by(User.full_name, PlanItem.position)
-        .all()
     )
+    if workshop_id:
+        items_query = items_query.join(Department, User.department_id == Department.id).filter(Department.workshop_id == workshop_id)
+    items = items_query.order_by(User.full_name, PlanItem.position).all()
+    plans_count = len({item.plan_id for item in items})
     department_rows, executor_rows = build_plan_department_rows(items)
     counts = {status: sum(1 for item in items if item.status == status) for status in PLAN_ITEM_STATUSES}
     summary = {
-        "plans_count": len(plans), "departments_count": len(department_rows),
+        "plans_count": plans_count, "departments_count": len(department_rows),
         "executors_count": len(executor_rows), "items_total": len(items),
         "planned_count": counts["planned"], "done_count": counts["done"],
         "not_done_count": counts["not_done"], "cancelled_count": counts["cancelled"],
@@ -7028,7 +7830,7 @@ def plans_monthly_report_export():
     writer.writerow(["Период", "{} - {}".format(period_start.strftime("%d.%m.%Y"), period_end.strftime("%d.%m.%Y"))])
     writer.writerow([])
     writer.writerow([
-        "Отдел", "Исполнитель", "№", "Мероприятие", "Связанная задача",
+        "Отдел", "Исполнитель", "№", "Мероприятие", "Связанная задача", "Обоснования",
         "Срок выполнения", "Плановые часы", "Результат", "Комментарий",
     ])
     for item in items:
@@ -7040,12 +7842,18 @@ def plans_monthly_report_export():
         status = plan_item_status_meta(item.status)["label"]
         department = item.executor.department.name if item.executor and item.executor.department else "Без отдела"
         linked_task = "#{} {}".format(item.linked_activity.id, item.linked_activity.title) if item.linked_activity else ""
+        justification_text = (
+            item.linked_activity.outgoing_document
+            if item.linked_activity and item.linked_activity.outgoing_document
+            else item.justification or "-"
+        )
         writer.writerow([
             department,
             item.executor.full_name if item.executor else "",
             item.position,
             item.task_text,
             linked_task,
+            justification_text,
             deadline,
             item.planned_hours or 0,
             status,

@@ -3,7 +3,7 @@
 <div class="container mt-4 report-sheet">
   <div class="print-header">
     <div class="print-requisites"><div>Организация: ______________________________</div><div>УТВЕРЖДАЮ<br>________________ /____________/<br>«___» __________ 20__ г.</div></div>
-    <h1>СВОДНЫЙ ОТЧЕТ ПО ВЫПОЛНЕНИЮ ПЛАНОВ</h1>
+    <h1>СВОДНЫЙ ПЛАН</h1>
     <div>за {{ period_start.strftime('%B %Y') }}</div>
     <div class="mt-1">Период: {{ period_start.strftime('%d.%m.%Y') }} - {{ period_end.strftime('%d.%m.%Y') }}</div>
   </div>
@@ -113,6 +113,7 @@
               <th>№</th>
               <th>Мероприятие</th>
               <th>Связанная задача</th>
+              <th>Обоснования</th>
               <th>Срок выполнения</th>
               <th>План, ч</th>
               <th>Результат</th>
@@ -121,7 +122,7 @@
           </thead>
           <tbody>
             {% for department in department_rows %}
-              <tr class="table-info department-row"><td colspan="8" class="fw-bold text-dark">{{ department.name }} · всего: {{ department.total }} · план: {{ department.planned_hours }} ч · выполнено: {{ department.done }} / {{ department.done_hours }} ч · невыполнено: {{ department.not_done }} / {{ department.not_done_hours }} ч · {{ department.completion }}%</td></tr>
+              <tr class="table-info department-row"><td colspan="9" class="fw-bold text-dark">{{ department.name }} · всего: {{ department.total }} · план: {{ department.planned_hours }} ч · выполнено: {{ department.done }} / {{ department.done_hours }} ч · невыполнено: {{ department.not_done }} / {{ department.not_done_hours }} ч · {{ department.completion }}%</td></tr>
               {% for group in department.executors %}
                 {% for item in group["items"] %}
                 <tr>
@@ -129,6 +130,7 @@
                   <td>{{ item.position }}</td>
                   <td style="min-width: 320px;">{{ item.task_text }}</td>
                   <td style="min-width: 190px;">{% if item.linked_activity %}<a href="{{ url_for('activity_view', activity_id=item.linked_activity.id) }}">#{{ item.linked_activity.id }} {{ item.linked_activity.title }}</a>{% else %}-{% endif %}</td>
+                  <td style="min-width: 190px;">{{ item.linked_activity.outgoing_document if item.linked_activity and item.linked_activity.outgoing_document else item.justification or '-' }}</td>
                   <td>{% if item.deadline_kind == 'date' and item.deadline_date %}До {{ item.deadline_date.strftime('%d.%m.%Y') }}{% else %}{{ deadline_options.get(item.deadline_kind, item.deadline_kind) }}{% endif %}</td>
                   <td>{{ item.planned_hours or 0 }}</td>
                   {% set meta = get_plan_status_meta(item.status) %}<td><span class="badge {{ meta.class }}">{{ meta.label }}</span></td>
@@ -138,7 +140,7 @@
               {% endfor %}
             {% else %}
             <tr>
-              <td colspan="8" class="text-center text-muted py-4">За выбранный месяц пункты планов не найдены.</td>
+              <td colspan="9" class="text-center text-muted py-4">За выбранный месяц пункты планов не найдены.</td>
             </tr>
             {% endfor %}
           </tbody>

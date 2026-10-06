@@ -9,13 +9,13 @@
 
 <div class="list-group">
   {% for item in notifications_list %}
-  <div class="list-group-item {% if not item.read_at %}border-info{% endif %}">
+  <div class="list-group-item {% if not item.read_at %}border-info{% endif %}" style="background-color: {{ item.background_color or '#0d6efd' }}; color: #fff;">
     <div class="d-flex justify-content-between gap-3">
       <div>
         <strong>{{ item.title }}</strong>
         <div class="mt-1" style="white-space: pre-wrap;">{{ item.message }}</div>
       </div>
-      <small class="text-muted text-nowrap">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</small>
+      <small class="text-nowrap" style="color: rgba(255,255,255,.8);">Отправлено: {{ (item.scheduled_at or item.created_at).strftime('%d.%m.%Y %H:%M') }}</small>
     </div>
   </div>
   {% else %}

@@ -16,7 +16,7 @@
     </div>
     <div class="d-flex gap-2">
       <a href="{{ url_for('activities_page') }}" class="btn btn-outline-info">К задачам</a>
-      <button type="button" class="btn btn-outline-light" onclick="window.print()">Печать</button>
+      <a href="{{ url_for('activities_analytics', date_from=date_from, date_to=date_to, department_id=selected_department_id, owner_id=selected_owner_id, print=1) }}" class="btn btn-outline-light" target="_blank" rel="noopener">Печатная форма</a>
     </div>
   </div>
 
@@ -106,5 +106,5 @@ stackedChart('usersChart', chartData.user_labels, chartData.user_done, chartData
 new Chart(document.getElementById('qualityChart'), { type: 'bar', data: { labels: chartData.department_labels, datasets: [{ label: 'Качество', data: chartData.department_quality, backgroundColor: '#198754' }, { label: 'Выполнение', data: chartData.department_completion, backgroundColor: '#0dcaf0' }, { label: 'По сложности', data: chartData.department_complexity_completion, backgroundColor: '#6f42c1' }] }, options: { responsive: true, scales: { x: axis, y: { ...axis, beginAtZero: true, max: 100 } }, plugins: { legend } } });
 new Chart(document.getElementById('extraValuesChart'), { type: 'bar', data: { labels: chartData.extra_labels, datasets: [{ label: 'Задач с показателем', data: chartData.extra_tasks_count, backgroundColor: '#00bcd4' }] }, options: { indexAxis: 'y', scales: { x: { ...axis, beginAtZero: true }, y: axis }, plugins: { legend } } });
 </script>
-<style>@media print { nav, footer, form, .btn, .alert { display:none !important; } .container { max-width:100% !important; } .card { border:1px solid #999 !important; box-shadow:none !important; } .print-chart { break-inside:avoid; } }</style>
+<style>@media print { nav, footer, form, .btn, .alert, .print-chart { display:none !important; } .container { max-width:100% !important; } .card { border:1px solid #999 !important; box-shadow:none !important; } .table-responsive { overflow:visible !important; } }</style>
 {% endblock %}

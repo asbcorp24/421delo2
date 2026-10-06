@@ -41,6 +41,15 @@
       <label class="form-label" for="notification-message">Текст уведомления</label>
       <textarea id="notification-message" name="message" class="form-control" rows="5" required placeholder="Введите текст уведомления"></textarea>
     </div>
+    <div class="col-md-6">
+      <label class="form-label" for="notification-scheduled-at">Дата и время отправки</label>
+      <input id="notification-scheduled-at" type="datetime-local" name="scheduled_at" class="form-control">
+      <div class="form-text">Оставьте пустым, чтобы отправить сразу. После указанного времени уведомление появится у получателя в течение 30 секунд.</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label" for="notification-background-color">Цвет фона</label>
+      <div class="d-flex align-items-center gap-2"><input id="notification-background-color" type="color" name="background_color" value="#0d6efd" class="form-control form-control-color"><span class="text-muted small">Цвет toast и карточки в уведомлениях</span></div>
+    </div>
     <div class="col-12 d-flex gap-2">
       <button class="btn btn-primary">Отправить</button>
       <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Отмена</a>

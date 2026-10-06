@@ -5,19 +5,33 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="3620fcb2-c813-485b-867d-b0a72e010323" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/templates/activities_analytics_print.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/schedule_document_detail.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/schedule_form.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/schedules.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/schedules_journal.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.db" beforeDir="false" afterPath="$PROJECT_DIR$/app.db" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/models.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/activities.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/activities.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/activities_analytics.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/activities_analytics.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/activity_create.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/activity_create.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/activity_create_from_letter.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/activity_create_from_letter.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/activity_edit.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/activity_edit.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/activity_view.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/activity_view.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/admin_letter_sources.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/admin_letter_sources.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/dashboard.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/dashboard.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/document_templates.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/document_templates.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/layout.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/layout.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/letters.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/letters.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/memo_view.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/memo_view.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/memos.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/memos.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/notification_send.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/notification_send.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/notifications.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/notifications.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/plan_create.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/plan_create.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/plan_detail.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/plan_detail.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/plans.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/plans.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/plans_monthly_report.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/plans_monthly_report.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/plans_review.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/plans_review.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/report_external_links.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/report_external_links.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -34,6 +48,9 @@
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$PROJECT_DIR$/.venv/Lib/site-packages/flask_login/utils.py" root0="SKIP_INSPECTION" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />

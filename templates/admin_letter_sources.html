@@ -65,15 +65,18 @@
         {% if source.notes %}<div class="small text-muted">{{ source.notes }}</div>{% endif %}
       </td>
       <td>
-        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editSourceModal{{ source.id }}">
-          Редактировать
-        </button>
-        <form method="post" action="{{ url_for('delete_letter_source', source_id=source.id) }}" class="d-inline">
-          <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить предприятие?')">Удалить</button>
-        </form>
+        {% if can_manage_sources %}
+          <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editSourceModal{{ source.id }}">
+            Редактировать
+          </button>
+          <form method="post" action="{{ url_for('delete_letter_source', source_id=source.id) }}" class="d-inline">
+            <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить предприятие?')">Удалить</button>
+          </form>
+        {% else %}<span class="text-muted small">Только просмотр</span>{% endif %}
       </td>
     </tr>
 
+    {% if can_manage_sources %}
     <div class="modal fade" id="editSourceModal{{ source.id }}" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
@@ -120,6 +123,7 @@
         </div>
       </div>
     </div>
+    {% endif %}
     {% else %}
     <tr>
       <td colspan="6" class="text-center text-muted">Предприятия пока не добавлены</td>

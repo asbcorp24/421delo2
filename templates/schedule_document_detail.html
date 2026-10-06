@@ -1,0 +1,81 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <div class="text-muted small">График №{{ schedule.id }} от {{ schedule.schedule_date.strftime('%d.%m.%Y') }}</div>
+    <h3 class="mb-1">{{ schedule.title }}</h3>
+    {% if schedule.description %}<div class="text-muted">{{ schedule.description }}</div>{% endif %}
+  </div>
+  <a class="btn btn-outline-info" href="{{ url_for('schedules_journal_page') }}">К журналу</a>
+</div>
+
+<style>
+  .schedule-gantt { overflow-x: auto; }
+  .schedule-gantt-grid { min-width: 860px; }
+  .schedule-gantt-head, .schedule-gantt-row { display: grid; grid-template-columns: minmax(260px, 32%) 1fr; }
+  .schedule-gantt-head { border: 1px solid #0dcaf0; border-bottom: 0; background: #102b33; color: #c9f7ff; font-size: .8rem; font-weight: 700; }
+  .schedule-gantt-head > div { padding: .55rem .7rem; }
+  .schedule-gantt-row { min-height: 46px; border: 1px solid rgba(13,202,240,.35); border-top: 0; background: rgba(13,30,36,.55); }
+  .schedule-gantt-task { padding: .45rem .7rem; border-right: 1px solid rgba(13,202,240,.35); }
+  .schedule-gantt-task small { display: block; color: #9fb7bd; }
+  .schedule-gantt-track { position: relative; min-height: 45px; background-image: repeating-linear-gradient(90deg, transparent 0, transparent calc(14.285% - 1px), rgba(255,255,255,.10) calc(14.285% - 1px), rgba(255,255,255,.10) 14.285%); }
+  .schedule-gantt-bar { position: absolute; top: 11px; height: 23px; min-width: 10px; padding: 3px 7px; overflow: hidden; border-radius: 4px; color: #fff; font-size: .75rem; line-height: 17px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+  .schedule-gantt-label { position: absolute; top: 3px; transform: translateX(-50%); color: #9fb7bd; font-size: .7rem; white-space: nowrap; }
+  .schedule-gantt-label:first-child { transform: none; }
+</style>
+
+<div class="card bg-dark border-primary mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center"><span class="text-primary fw-semibold">Диаграмма графика</span><small class="text-muted">{{ gantt.start.strftime('%d.%m.%Y') }} - {{ gantt.end.strftime('%d.%m.%Y') }}</small></div>
+  <div class="card-body p-0 schedule-gantt"><div class="schedule-gantt-grid">
+    <div class="schedule-gantt-head"><div>Мероприятие / ответственный</div><div class="position-relative">{% for label in gantt.labels %}<span class="schedule-gantt-label" style="left:{{ label.left }}%">{{ label.label }}</span>{% endfor %}</div></div>
+    {% for row in gantt.rows %}<div class="schedule-gantt-row"><div class="schedule-gantt-task"><strong>{{ row.item.position }}. {{ row.item.text }}</strong><small>{{ row.item.responsible.full_name if row.item.responsible else '-' }} · {{ row.start.strftime('%d.%m') }}{% if row.end != row.start %} - {{ row.end.strftime('%d.%m') }}{% endif %}</small></div><div class="schedule-gantt-track"><div class="schedule-gantt-bar" style="left:{{ row.left }}%; width:{{ row.width }}%; background-color:{{ row.deadline.color }}; color:{{ row.deadline.text_color }}" title="{{ row.deadline.label }}">{{ row.deadline.label }}</div></div></div>{% else %}<div class="p-4 text-muted">Добавьте пункты графика, чтобы увидеть временную шкалу.</div>{% endfor %}
+  </div></div>
+</div>
+
+{% if can_manage %}
+<form method="post" class="card bg-dark border-secondary mb-3"><div class="card-body row g-2"><div class="col-md-5"><input name="title" class="form-control" value="{{ schedule.title }}" required></div><div class="col-md-3"><input type="date" name="schedule_date" class="form-control" value="{{ schedule.schedule_date.isoformat() }}" required></div><div class="col-md-4"><input name="description" class="form-control" value="{{ schedule.description or '' }}" placeholder="Описание"></div><div class="col-12"><button class="btn btn-sm btn-outline-light">Сохранить реквизиты</button></div></div></form>
+{% endif %}
+
+<div class="card bg-dark border-info mb-3">
+  <div class="card-header text-info">Пункты графика</div>
+  <div class="table-responsive"><table class="table table-dark align-middle mb-0">
+    <thead><tr><th>№</th><th>Дата</th><th>Мероприятие</th><th>Ответственный</th><th>Задача</th><th>Служебная</th><th>Выполнение</th><th></th></tr></thead>
+    <tbody>{% for item in schedule.items %}{% set meta = statuses.get(item.status, {}) %}
+      <tr>
+        <td>{{ item.position }}</td><td>{{ item.item_date.strftime('%d.%m.%Y') }}{% set deadline = schedule_deadline_meta(item) %}<span class="badge d-block mt-1" style="background-color:{{ deadline.color }};color:{{ deadline.text_color }}">{{ deadline.label }}</span></td><td style="min-width:220px;white-space:pre-wrap">{{ item.text }}</td><td>{{ item.responsible.full_name if item.responsible else '-' }}</td>
+        <td>{% if item.activity %}<a href="{{ url_for('activity_view', activity_id=item.activity.id) }}">#{{ item.activity.id }} {{ item.activity.title }}</a>{% elif can_manage %}<button type="button" class="btn btn-sm btn-outline-success schedule-create-task" data-bs-toggle="modal" data-bs-target="#scheduleTaskModal" data-item-id="{{ item.id }}" data-title="{{ item.text }}" data-date="{{ item.item_date.isoformat() }}" data-responsible-id="{{ item.responsible_id }}">Создать задачу</button>{% else %}-{% endif %}</td>
+        <td>{% if item.memo %}<a href="{{ url_for('memo_view', memo_id=item.memo.id) }}">№{{ item.memo.reg_number or item.memo.id }}</a>{% elif can_manage %}<button type="button" class="btn btn-sm btn-outline-warning schedule-create-memo" data-bs-toggle="modal" data-bs-target="#scheduleMemoModal" data-item-id="{{ item.id }}" data-subject="{{ item.text }}" data-responsible-id="{{ item.responsible_id }}">Создать служебную</button>{% else %}-{% endif %}</td>
+        <td>{% if can_manage or item.responsible_id == current_user.id %}<form method="post" action="{{ url_for('schedule_document_update_item', schedule_id=schedule.id, item_id=item.id) }}" class="d-flex gap-1"><div><select name="status" class="form-select form-select-sm">{% for value, option in statuses.items() %}<option value="{{ value }}" {% if item.status == value %}selected{% endif %}>{{ option.label }}</option>{% endfor %}</select><input name="completion_comment" class="form-control form-control-sm mt-1" value="{{ item.completion_comment or '' }}" placeholder="Комментарий"></div><button class="btn btn-sm btn-outline-success">OK</button></form>{% else %}<span class="badge {{ meta.get('class', 'bg-secondary') }}">{{ meta.get('label', item.status) }}</span>{% if item.completion_comment %}<div class="small text-muted mt-1">{{ item.completion_comment }}</div>{% endif %}{% endif %}</td>
+        <td>{% if can_manage %}<form method="post" action="{{ url_for('schedule_document_delete_item', schedule_id=schedule.id, item_id=item.id) }}" onsubmit="return confirm('Удалить пункт?')"><button class="btn btn-sm btn-outline-danger">Удалить</button></form>{% endif %}</td>
+      </tr>
+    {% else %}<tr><td colspan="8" class="text-center text-muted py-4">Пункты пока не добавлены.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+{% if can_manage %}
+<div class="card bg-dark border-info mb-3"><div class="card-body"><h5>Добавить готовый пункт</h5><form method="post" action="{{ url_for('schedule_document_add_item', schedule_id=schedule.id) }}" class="row g-2"><div class="col-md-3"><input type="date" name="item_date" class="form-control" value="{{ schedule.schedule_date.isoformat() }}" required></div><div class="col-md-4"><select name="responsible_id" class="form-select" required><option value="">Ответственный</option>{% for user in users %}<option value="{{ user.id }}">{{ user.full_name }}</option>{% endfor %}</select></div><div class="col-md-5"><textarea name="text" class="form-control" rows="1" required placeholder="Мероприятие"></textarea></div><div class="col-md-5"><select name="activity_id" class="form-select"><option value="">Привязать готовую задачу</option>{% for activity in activities %}<option value="{{ activity.id }}">#{{ activity.id }} · {{ activity.title }}</option>{% endfor %}</select></div><div class="col-md-5"><select name="memo_id" class="form-select"><option value="">Привязать готовую служебную</option>{% for memo in memos %}<option value="{{ memo.id }}">№{{ memo.reg_number or memo.id }} · {{ memo.subject }}</option>{% endfor %}</select></div><div class="col-md-2"><button class="btn btn-info w-100">Добавить</button></div></form></div></div>
+
+<div class="modal fade" id="scheduleTaskModal" tabindex="-1" aria-labelledby="scheduleTaskModalTitle" aria-hidden="true"><div class="modal-dialog"><form method="post" action="{{ url_for('schedule_document_create_task', schedule_id=schedule.id) }}" class="modal-content bg-dark border-success"><div class="modal-header"><h5 class="modal-title text-success" id="scheduleTaskModalTitle">Создать задачу по пункту графика</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body row g-2"><input type="hidden" name="item_id" id="schedule-task-item-id"><div class="col-12"><label class="form-label">Название задачи</label><input name="title" id="schedule-task-title" class="form-control" required></div><div class="col-12"><label class="form-label">Тип задачи</label><select name="type_id" class="form-select" required><option value="">Выберите тип</option>{% for activity_type in activity_types %}<option value="{{ activity_type.id }}">{{ activity_type.name }}</option>{% endfor %}</select></div><div class="col-md-6"><label class="form-label">Ответственный</label><select name="responsible_id" id="schedule-task-responsible" class="form-select" required>{% for user in users %}<option value="{{ user.id }}">{{ user.full_name }}</option>{% endfor %}</select></div><div class="col-md-6"><label class="form-label">Срок</label><input type="date" name="end_date" id="schedule-task-date" class="form-control" required></div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button><button class="btn btn-success">Создать задачу</button></div></form></div></div>
+
+<div class="modal fade" id="scheduleMemoModal" tabindex="-1" aria-labelledby="scheduleMemoModalTitle" aria-hidden="true"><div class="modal-dialog"><form method="post" action="{{ url_for('schedule_document_create_memo', schedule_id=schedule.id) }}" class="modal-content bg-dark border-warning"><div class="modal-header"><h5 class="modal-title text-warning" id="scheduleMemoModalTitle">Создать служебную по пункту графика</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body row g-2"><input type="hidden" name="item_id" id="schedule-memo-item-id"><div class="col-12"><label class="form-label">Тема служебной</label><input name="subject" id="schedule-memo-subject" class="form-control" required></div><div class="col-md-6"><label class="form-label">Отдел</label><select name="department_id" class="form-select" required><option value="">Выберите отдел</option>{% for department in departments %}<option value="{{ department.id }}">{{ department.name }}</option>{% endfor %}</select></div><div class="col-md-6"><label class="form-label">Ответственный</label><select name="responsible_id" id="schedule-memo-responsible" class="form-select" required>{% for user in users %}<option value="{{ user.id }}">{{ user.full_name }}</option>{% endfor %}</select></div><div class="col-12"><div class="small text-muted">Дата служебной будет взята из даты пункта графика.</div></div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button><button class="btn btn-warning">Создать служебную</button></div></form></div></div>
+
+<form method="post" action="{{ url_for('schedule_document_delete', schedule_id=schedule.id) }}" class="mt-3" onsubmit="return confirm('Удалить график и все его пункты?')"><button class="btn btn-outline-danger">Удалить график</button></form>
+<script>
+  document.querySelectorAll('.schedule-create-task').forEach(function (button) {
+    button.addEventListener('click', function () {
+      document.getElementById('schedule-task-item-id').value = this.dataset.itemId;
+      document.getElementById('schedule-task-title').value = this.dataset.title;
+      document.getElementById('schedule-task-date').value = this.dataset.date;
+      document.getElementById('schedule-task-responsible').value = this.dataset.responsibleId;
+    });
+  });
+  document.querySelectorAll('.schedule-create-memo').forEach(function (button) {
+    button.addEventListener('click', function () {
+      document.getElementById('schedule-memo-item-id').value = this.dataset.itemId;
+      document.getElementById('schedule-memo-subject').value = this.dataset.subject;
+      document.getElementById('schedule-memo-responsible').value = this.dataset.responsibleId;
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -15,7 +15,7 @@
     <div class="col-md-3"><label class="form-label">Дата начала</label><input type="date" name="start_date" class="form-control" value="{{ activity.start_date.strftime('%Y-%m-%d') if activity.start_date else '' }}"></div>
     <div class="col-md-3"><label class="form-label">Дата окончания</label><input type="date" name="end_date" class="form-control" value="{{ activity.end_date.strftime('%Y-%m-%d') if activity.end_date else '' }}"></div>
     <div class="col-md-3"><label class="form-label">Тема</label><input name="direction" class="form-control" value="{{ activity.direction or '' }}"></div>
-    <div class="col-12"><label class="form-label">Исходный документ</label><input name="outgoing_document" class="form-control" value="{{ activity.outgoing_document or '' }}"></div>
+    <div class="col-12"><label class="form-label">Обоснования</label><input name="outgoing_document" class="form-control" value="{{ activity.outgoing_document or '' }}"></div>
     <div class="col-12"><label class="form-label">Описание</label><textarea name="description" class="form-control" rows="6">{{ activity.description or '' }}</textarea></div>
   </div>
   <div class="text-end mt-3"><button class="btn btn-success">Сохранить изменения</button></div>

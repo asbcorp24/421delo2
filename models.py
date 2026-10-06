@@ -376,6 +376,7 @@ class PlanItem(db.Model):
     executor_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     position = db.Column(db.Integer, nullable=False, default=1)
     task_text = db.Column(db.Text, nullable=False)
+    justification = db.Column(db.Text)
     deadline_kind = db.Column(db.String(32), nullable=False, default="month")
     deadline_date = db.Column(db.Date)
     planned_hours = db.Column(db.Float, nullable=False, default=0)
@@ -427,6 +428,66 @@ class ProtocolItem(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
 
     activity = db.relationship("Activity", foreign_keys=[activity_id])
+
+
+class Schedule(db.Model):
+    """A schedule document that groups dated work items, similarly to a protocol."""
+    __tablename__ = "schedules"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    schedule_date = db.Column(db.Date, nullable=False, default=dt.date.today)
+    description = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+
+    creator = db.relationship("User", foreign_keys=[created_by_id], backref="created_schedules")
+    items = db.relationship("ScheduleItem", backref="schedule", cascade="all, delete-orphan", order_by="ScheduleItem.position")
+
+
+class ScheduleItem(db.Model):
+    __tablename__ = "schedule_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    schedule_id = db.Column(db.Integer, db.ForeignKey("schedules.id"), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=1)
+    item_date = db.Column(db.Date, nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    responsible_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    status = db.Column(db.String(32), nullable=False, default="planned")
+    completion_comment = db.Column(db.Text)
+    completed_at = db.Column(db.DateTime)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activities.id"))
+    memo_id = db.Column(db.Integer, db.ForeignKey("letters.id"))
+    created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow)
+
+    responsible = db.relationship("User", foreign_keys=[responsible_id], backref="schedule_items")
+    activity = db.relationship("Activity", foreign_keys=[activity_id])
+    memo = db.relationship("Letter", foreign_keys=[memo_id])
+
+
+class ScheduleEntry(db.Model):
+    """A dated schedule-journal entry optionally linked to a task and memo."""
+    __tablename__ = "schedule_entries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    schedule_date = db.Column(db.Date, nullable=False, default=dt.date.today)
+    text = db.Column(db.Text, nullable=False)
+    responsible_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    status = db.Column(db.String(32), nullable=False, default="planned")
+    completion_comment = db.Column(db.Text)
+    completed_at = db.Column(db.DateTime)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activities.id"))
+    memo_id = db.Column(db.Integer, db.ForeignKey("letters.id"))
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow)
+
+    responsible = db.relationship("User", foreign_keys=[responsible_id], backref="schedule_entries")
+    creator = db.relationship("User", foreign_keys=[created_by_id], backref="created_schedule_entries")
+    activity = db.relationship("Activity", foreign_keys=[activity_id])
+    memo = db.relationship("Letter", foreign_keys=[memo_id])
 
 
 class DocumentAccess(db.Model):
@@ -498,6 +559,8 @@ class UserNotification(db.Model):
     title = db.Column(db.String(180), nullable=False)
     message = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=dt.datetime.utcnow, nullable=False)
+    scheduled_at = db.Column(db.DateTime, default=dt.datetime.utcnow, nullable=False)
+    background_color = db.Column(db.String(16), nullable=False, default="#0d6efd")
     read_at = db.Column(db.DateTime)
 
     recipient = db.relationship("User", foreign_keys=[user_id], backref="notifications")
@@ -581,7 +644,7 @@ __all__ = [
     "Letter",
     "LetterRecipient",
     "LetterActivityLink",
-    "LetterLetterLink","LetterDocument","ValueTemplate","PlanExecutor","Plan","PlanItem","Protocol","ProtocolItem","DocumentAccess","ChatMessage",
+    "LetterLetterLink","LetterDocument","ValueTemplate","PlanExecutor","Plan","PlanItem","Protocol","ProtocolItem","Schedule","ScheduleItem","ScheduleEntry","DocumentAccess","ChatMessage",
     "DownloadLog","GeneralDocument","SharedLink","Task","TaskAssignee","UserNotification","ActivityHistory",
     "ActivityTemplate", "MemoTemplate"
 ]
