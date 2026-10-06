@@ -1342,6 +1342,87 @@ def crm_api_activity_payload(activity):
     }
 
 
+def crm_api_activity_full_payload(activity):
+    """Return the fullest safe integration representation of one activity."""
+    payload = crm_api_activity_payload(activity)
+
+    logs = ActivityLog.query.filter_by(activity_id=activity.id).order_by(
+        ActivityLog.entry_date.asc(), ActivityLog.id.asc()
+    ).all()
+    payload["logs"] = [{
+        "id": row.id,
+        "parent_id": row.parent_id,
+        "text": row.text,
+        "entry_date": iso_or_none(row.entry_date),
+        "is_done": bool(row.is_done),
+    } for row in logs]
+
+    history = ActivityHistory.query.filter_by(activity_id=activity.id).options(
+        joinedload(ActivityHistory.author)
+    ).order_by(ActivityHistory.created_at.desc(), ActivityHistory.id.desc()).all()
+    payload["history"] = [{
+        "id": row.id,
+        "action": row.action,
+        "details": row.details,
+        "created_at": iso_or_none(row.created_at),
+        "author": crm_api_user(row.author),
+    } for row in history]
+
+    documents = ActivityDocument.query.filter_by(activity_id=activity.id).order_by(
+        ActivityDocument.uploaded_at.desc(), ActivityDocument.id.desc()
+    ).all()
+    payload["documents"] = [{
+        "id": row.id,
+        "filename": row.filename,
+        "uploaded_by_id": row.uploaded_by_id,
+        "uploaded_at": iso_or_none(row.uploaded_at),
+        "ocr_status": row.ocr_status,
+        "ocr_error": row.ocr_error,
+        "ocr_started_at": iso_or_none(row.ocr_started_at),
+        "ocr_completed_at": iso_or_none(row.ocr_completed_at),
+        "recognized_text": row.doc_rec,
+    } for row in documents]
+
+    extras = activity.extra_values
+    if isinstance(extras, str):
+        try:
+            extras = json.loads(extras)
+        except (TypeError, ValueError):
+            extras = []
+    payload["extra_values"] = extras if isinstance(extras, list) else []
+
+    payload["linked_letters"] = [{
+        "id": letter.id,
+        "number": letter.reg_number,
+        "subject": letter.subject,
+        "date": iso_or_none(letter.letter_date),
+        "approval_status": letter.approval_status,
+        "author": crm_api_user(letter.author),
+        "executor": crm_api_user(letter.executor),
+    } for letter in activity.letters]
+
+    payload["created_by"] = crm_api_user(activity.created_by)
+    payload["approved_by"] = crm_api_user(activity.approved_by)
+    payload["approved_at"] = iso_or_none(activity.approved_at)
+    payload["approve_comment"] = activity.approve_comment
+    payload["decision"] = activity.decision
+    payload["archived_at"] = iso_or_none(activity.archived_at)
+    payload["archived_by_id"] = activity.archived_by_id
+    payload["plan_requested"] = bool(activity.plan_requested)
+
+    if activity.plan_id:
+        plan = Plan.query.options(
+            joinedload(Plan.creator),
+            joinedload(Plan.items).joinedload(PlanItem.executor).joinedload(User.department),
+            joinedload(Plan.items).joinedload(PlanItem.linked_activity),
+        ).filter_by(id=activity.plan_id).first()
+        payload["plan"] = crm_api_plan_payload(plan) if plan else None
+    else:
+        payload["plan"] = None
+
+    return payload
+
+
 def crm_api_plan_payload(plan):
     return {
         "id": plan.id,
@@ -1674,6 +1755,90 @@ def crm_api_tasks():
             "completion_memo": {"id": activity.completion_memo.id, "number": activity.completion_memo.reg_number, "subject": activity.completion_memo.subject} if activity.completion_memo else None,
         })
     return jsonify({"data": data, "pagination": {"total": total, "limit": limit, "offset": offset}})
+
+
+@app.get("/api/crm/v1/tasks/<int:activity_id>")
+@crm_api_required
+def crm_api_task_detail(activity_id):
+    activity = Activity.query.options(
+        joinedload(Activity.owner).joinedload(User.department),
+        joinedload(Activity.created_by).joinedload(User.department),
+        joinedload(Activity.approved_by).joinedload(User.department),
+        joinedload(Activity.type),
+        joinedload(Activity.assigned_department),
+        joinedload(Activity.source_letter),
+        joinedload(Activity.completion_memo),
+        joinedload(Activity.letters).joinedload(Letter.author),
+        joinedload(Activity.letters).joinedload(Letter.executor),
+    ).filter_by(id=activity_id).first_or_404()
+    return jsonify({"data": crm_api_activity_full_payload(activity)})
+
+
+@app.get("/api/crm/v1/tasks/<int:activity_id>/logs")
+@crm_api_required
+def crm_api_task_logs(activity_id):
+    activity = db.session.get(Activity, activity_id)
+    if not activity:
+        return jsonify({"error": "not_found", "message": "Задача не найдена."}), 404
+    rows = ActivityLog.query.filter_by(activity_id=activity.id).order_by(
+        ActivityLog.entry_date.asc(), ActivityLog.id.asc()
+    ).all()
+    return jsonify({"data": [{
+        "id": row.id,
+        "parent_id": row.parent_id,
+        "text": row.text,
+        "entry_date": iso_or_none(row.entry_date),
+        "is_done": bool(row.is_done),
+    } for row in rows]})
+
+
+@app.post("/api/crm/v1/tasks/<int:activity_id>/logs")
+@crm_api_required
+def crm_api_task_log_create(activity_id):
+    activity = db.session.get(Activity, activity_id)
+    if not activity:
+        return jsonify({"error": "not_found", "message": "Задача не найдена."}), 404
+    if activity.archived_at:
+        return jsonify({"error": "archived", "message": "Архивную задачу изменять нельзя."}), 409
+
+    payload = crm_api_json_body()
+    if not payload:
+        return jsonify({"error": "invalid_json", "message": "Передайте JSON-объект записи журнала."}), 400
+
+    text_value = payload.get("text")
+    if not isinstance(text_value, str) or not text_value.strip():
+        return jsonify({"error": "validation_error", "message": "Укажите непустой text."}), 400
+
+    entry_date = crm_api_datetime(payload.get("entry_date")) if "entry_date" in payload else dt.datetime.utcnow()
+    if entry_date is False:
+        return jsonify({"error": "validation_error", "message": "entry_date должен быть датой ISO 8601."}), 400
+
+    parent_id = payload.get("parent_id")
+    parent = None
+    if parent_id is not None:
+        parent = ActivityLog.query.filter_by(id=parent_id, activity_id=activity.id).first() if isinstance(parent_id, int) else None
+        if not parent:
+            return jsonify({"error": "validation_error", "message": "Родительская запись журнала не найдена."}), 400
+
+    row = ActivityLog(
+        activity_id=activity.id,
+        text=text_value.strip(),
+        entry_date=entry_date or dt.datetime.utcnow(),
+        parent_id=parent.id if parent else None,
+        is_done=bool(payload.get("is_done", False)),
+    )
+    db.session.add(row)
+    db.session.flush()
+    add_activity_history(activity, "Журнал действий", "Через API добавлена запись журнала: {}".format(text_value.strip()))
+    db.session.commit()
+
+    return jsonify({"data": {
+        "id": row.id,
+        "parent_id": row.parent_id,
+        "text": row.text,
+        "entry_date": iso_or_none(row.entry_date),
+        "is_done": bool(row.is_done),
+    }}), 201
 
 
 @app.post("/api/crm/v1/tasks")
