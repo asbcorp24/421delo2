@@ -1841,6 +1841,34 @@ def crm_api_task_log_create(activity_id):
     }}), 201
 
 
+@app.get("/api/crm/v1/tasks/<int:activity_id>/documents/<int:document_id>/download")
+@crm_api_required
+def crm_api_task_document_download(activity_id, document_id):
+    activity = db.session.get(Activity, activity_id)
+    if not activity:
+        return jsonify({"error": "not_found", "message": "Задача не найдена."}), 404
+
+    document = ActivityDocument.query.filter_by(id=document_id, activity_id=activity.id).first()
+    if not document:
+        return jsonify({"error": "not_found", "message": "Документ задачи не найден."}), 404
+
+    raw_path = Path(document.filepath or "")
+    candidates = [
+        raw_path,
+        BASE_DIR / raw_path,
+        UPLOAD_DIR / raw_path.name,
+    ]
+    file_path = next((path for path in candidates if path and path.exists() and path.is_file()), None)
+    if not file_path:
+        return jsonify({"error": "file_not_found", "message": "Файл документа отсутствует на сервере."}), 404
+
+    return send_file(
+        str(file_path),
+        as_attachment=True,
+        download_name=document.filename or file_path.name,
+    )
+
+
 @app.post("/api/crm/v1/tasks")
 @crm_api_required
 def crm_api_create_task():
